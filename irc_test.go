@@ -17,7 +17,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	irc "github.com/fluffle/goirc/client"
 	"io"
 	"log"
 	"net"
@@ -26,17 +25,19 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	irc "github.com/fluffle/goirc/client"
 )
 
 type LineHandlerFunc func(*bufio.ReadWriter, *irc.Line) error
 
-func h_USER(conn *bufio.ReadWriter, line *irc.Line) error {
+func hUSER(conn *bufio.ReadWriter, line *irc.Line) error {
 	r := fmt.Sprintf(":example.com 001 %s :Welcome\n", line.Args[0])
-	conn.WriteString(r)
-	return nil
+	_, err := conn.WriteString(r)
+	return err
 }
 
-func h_QUIT(conn *bufio.ReadWriter, line *irc.Line) error {
+func hQUIT(conn *bufio.ReadWriter, line *irc.Line) error {
 	return fmt.Errorf("client asked to terminate")
 }
 
@@ -62,8 +63,8 @@ func (s *testServer) setDefaultHandlers() {
 	if s.lineHandlers == nil {
 		s.lineHandlers = make(map[string]LineHandlerFunc)
 	}
-	s.lineHandlers["USER"] = h_USER
-	s.lineHandlers["QUIT"] = h_QUIT
+	s.lineHandlers["USER"] = hUSER
+	s.lineHandlers["QUIT"] = hQUIT
 }
 
 func (s *testServer) getHandler(cmd string) LineHandlerFunc {
@@ -457,7 +458,7 @@ func TestSendAlertDisconnected(t *testing.T) {
 		testStep.Wait()
 		log.Printf("=Server= Completing session")
 		holdUserStep.Done()
-		return h_USER(conn, line)
+		return hUSER(conn, line)
 	}
 	server.SetHandler("USER", holdUser)
 
@@ -675,12 +676,13 @@ func TestGhostAndIdentify(t *testing.T) {
 	usedNick.Add(1)
 	unregisteredNickHandler.Add(1)
 	nickHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		var err error
 		if line.Args[0] == "foo" {
-			conn.WriteString(":example.com 433 * foo :nick in use\n")
+			_, err = conn.WriteString(":example.com 433 * foo :nick in use\n")
 		}
 		usedNick.Done()
 		unregisteredNickHandler.Wait()
-		return nil
+		return err
 	}
 	server.SetHandler("NICK", nickHandler)
 
