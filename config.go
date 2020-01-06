@@ -41,6 +41,7 @@ type Config struct {
 	IRCChannels    []IRCChannel `yaml:"irc_channels"`
 	NoticeTemplate string       `yaml:"notice_template"`
 	NoticeOnce     bool         `yaml:"notice_once_per_alert_group"`
+	UsePrivmsg     bool         `yaml:"use_privmsg"`
 }
 
 func LoadConfig(configFile string) (*Config, error) {
@@ -55,6 +56,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		IRCUseSSL:   true,
 		IRCChannels: []IRCChannel{IRCChannel{Name: "#airtest"}},
 		NoticeOnce:  false,
+		UsePrivmsg:  false,
 	}
 
 	if configFile != "" {
