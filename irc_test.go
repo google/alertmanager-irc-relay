@@ -212,6 +212,7 @@ func makeTestIRCConfig(IRCPort int) *Config {
 			IRCChannel{Name: "#bar"},
 			IRCChannel{Name: "#baz"},
 		},
+		UsePrivmsg: false,
 	}
 }
 
@@ -313,6 +314,63 @@ func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 		"JOIN #bar",
 		"JOIN #baz",
 		"NOTICE #foo :test message",
+		"QUIT :see ya",
+	}
+
+	if !reflect.DeepEqual(expectedCommands, server.Log) {
+		t.Error("Alert not sent correctly. Received commands:\n", strings.Join(server.Log, "\n"))
+	}
+}
+
+func TestUsePrivmsgToSendAlertOnPreJoinedChannel(t *testing.T) {
+	server, port := makeTestServer(t)
+	config := makeTestIRCConfig(port)
+	config.UsePrivmsg = true
+	notifier, alertMsgs := makeTestNotifier(t, config)
+
+	var testStep sync.WaitGroup
+
+	testChannel := "#foo"
+	testMessage := "test message"
+
+	// Send the alert after configured channels have joined, to ensure we
+	// check for no re-join attempt.
+	joinedHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		if line.Args[0] == testChannel {
+			testStep.Done()
+		}
+		return nil
+	}
+	server.SetHandler("JOIN", joinedHandler)
+
+	testStep.Add(1)
+	go notifier.Run()
+
+	testStep.Wait()
+
+	server.SetHandler("JOIN", nil)
+
+	privmsgHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		testStep.Done()
+		return nil
+	}
+	server.SetHandler("PRIVMSG", privmsgHandler)
+
+	testStep.Add(1)
+	alertMsgs <- AlertMsg{Channel: testChannel, Alert: testMessage}
+
+	testStep.Wait()
+
+	notifier.StopRunning <- true
+	server.Stop()
+
+	expectedCommands := []string{
+		"NICK foo",
+		"USER foo 12 * :",
+		"JOIN #foo",
+		"JOIN #bar",
+		"JOIN #baz",
+		"PRIVMSG #foo :test message",
 		"QUIT :see ya",
 	}
 

@@ -48,6 +48,11 @@ irc_channels:
 # Send only one message when webhook data is received.
 # Note: By default a message is sent for each alert in the webhook data.
 msg_once_per_alert_group: no
+#
+# Use PRIVMSG instead of NOTICE (default) to send messages.
+# Note: Sending PRIVMSG from bots is bad practice, do not enable this unless
+# necessary (e.g. unless NOTICEs would weaken your channel moderation policies)
+use_privmsg: yes
 
 # Define how IRC messages should be formatted.
 #

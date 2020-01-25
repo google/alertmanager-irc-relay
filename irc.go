@@ -62,6 +62,8 @@ type IRCNotifier struct {
 	PreJoinChannels []IRCChannel
 	JoinedChannels  map[string]ChannelState
 
+	UsePrivmsg bool
+
 	NickservDelayWait time.Duration
 	BackoffCounter    Delayer
 }
@@ -94,6 +96,7 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, erro
 		sessionDownSignal: make(chan bool),
 		PreJoinChannels:   config.IRCChannels,
 		JoinedChannels:    make(map[string]ChannelState),
+		UsePrivmsg:        config.UsePrivmsg,
 		NickservDelayWait: nickservWaitSecs * time.Second,
 		BackoffCounter:    backoffCounter,
 	}
@@ -196,7 +199,12 @@ func (notifier *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
 		return
 	}
 	notifier.JoinChannel(&IRCChannel{Name: alertMsg.Channel})
-	notifier.Client.Notice(alertMsg.Channel, alertMsg.Alert)
+
+	if notifier.UsePrivmsg {
+		notifier.Client.Privmsg(alertMsg.Channel, alertMsg.Alert)
+	} else {
+		notifier.Client.Notice(alertMsg.Channel, alertMsg.Alert)
+	}
 }
 
 func (notifier *IRCNotifier) Run() {

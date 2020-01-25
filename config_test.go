@@ -43,6 +43,7 @@ func TestLoadGoodConfig(t *testing.T) {
 		IRCChannels: []IRCChannel{IRCChannel{Name: "#foobar"}},
 		MsgTemplate: defaultMsgTemplate,
 		MsgOnce:     false,
+		UsePrivmsg:  false,
 	}
 	expectedData, err := yaml.Marshal(expectedConfig)
 	if err != nil {
