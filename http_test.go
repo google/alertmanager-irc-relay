@@ -26,7 +26,7 @@ import (
 type FakeHTTPListener struct {
 	StartedServing chan bool
 	StopServing    chan bool
-	AlertNotices   chan AlertNotice // kinda ugly putting it here, but convenient
+	AlertMsgs      chan AlertMsg // kinda ugly putting it here, but convenient
 	router         http.Handler
 }
 
@@ -42,15 +42,15 @@ func NewFakeHTTPListener() *FakeHTTPListener {
 	return &FakeHTTPListener{
 		StartedServing: make(chan bool),
 		StopServing:    make(chan bool),
-		AlertNotices:   make(chan AlertNotice, 10),
+		AlertMsgs:      make(chan AlertMsg, 10),
 	}
 }
 
 func MakeHTTPTestingConfig() *Config {
 	return &Config{
-		HTTPHost:       "test.web",
-		HTTPPort:       8888,
-		NoticeTemplate: "Alert {{ .Labels.alertname }} on {{ .Labels.instance }} is {{ .Status }}",
+		HTTPHost:    "test.web",
+		HTTPPort:    8888,
+		MsgTemplate: "Alert {{ .Labels.alertname }} on {{ .Labels.instance }} is {{ .Status }}",
 	}
 }
 
@@ -58,7 +58,7 @@ func RunHTTPTest(t *testing.T,
 	alertData string, url string,
 	testingConfig *Config, listener *FakeHTTPListener) *http.Response {
 	httpServer, err := NewHTTPServerForTesting(testingConfig,
-		listener.AlertNotices, listener.Serve)
+		listener.AlertMsgs, listener.Serve)
 	if err != nil {
 		t.Fatal(fmt.Sprintf("Could not create HTTP server: %s", err))
 	}
@@ -85,12 +85,12 @@ func TestAlertsDispatched(t *testing.T) {
 	listener := NewFakeHTTPListener()
 	testingConfig := MakeHTTPTestingConfig()
 
-	expectedAlertNotices := []AlertNotice{
-		AlertNotice{
+	expectedAlertMsgs := []AlertMsg{
+		AlertMsg{
 			Channel: "#somechannel",
 			Alert:   "Alert airDown on instance1:3456 is resolved",
 		},
-		AlertNotice{
+		AlertMsg{
 			Channel: "#somechannel",
 			Alert:   "Alert airDown on instance2:7890 is resolved",
 		},
@@ -106,12 +106,12 @@ func TestAlertsDispatched(t *testing.T) {
 			expectedStatusCode, response.StatusCode))
 	}
 
-	for _, expectedAlertNotice := range expectedAlertNotices {
-		alertNotice := <-listener.AlertNotices
-		if !reflect.DeepEqual(expectedAlertNotice, alertNotice) {
+	for _, expectedAlertMsg := range expectedAlertMsgs {
+		alertMsg := <-listener.AlertMsgs
+		if !reflect.DeepEqual(expectedAlertMsg, alertMsg) {
 			t.Error(fmt.Sprintf(
-				"Unexpected alert notice.\nExpected: %s\nActual: %s",
-				expectedAlertNotice, alertNotice))
+				"Unexpected alert msg.\nExpected: %s\nActual: %s",
+				expectedAlertMsg, alertMsg))
 		}
 	}
 }
@@ -119,11 +119,11 @@ func TestAlertsDispatched(t *testing.T) {
 func TestAlertsDispatchedOnce(t *testing.T) {
 	listener := NewFakeHTTPListener()
 	testingConfig := MakeHTTPTestingConfig()
-	testingConfig.NoticeOnce = true
-	testingConfig.NoticeTemplate = "Alert {{ .GroupLabels.alertname }} is {{ .Status }}"
+	testingConfig.MsgOnce = true
+	testingConfig.MsgTemplate = "Alert {{ .GroupLabels.alertname }} is {{ .Status }}"
 
-	expectedAlertNotices := []AlertNotice{
-		AlertNotice{
+	expectedAlertMsgs := []AlertMsg{
+		AlertMsg{
 			Channel: "#somechannel",
 			Alert:   "Alert airDown is resolved",
 		},
@@ -139,12 +139,12 @@ func TestAlertsDispatchedOnce(t *testing.T) {
 			expectedStatusCode, response.StatusCode))
 	}
 
-	for _, expectedAlertNotice := range expectedAlertNotices {
-		alertNotice := <-listener.AlertNotices
-		if !reflect.DeepEqual(expectedAlertNotice, alertNotice) {
+	for _, expectedAlertMsg := range expectedAlertMsgs {
+		alertMsg := <-listener.AlertMsgs
+		if !reflect.DeepEqual(expectedAlertMsg, alertMsg) {
 			t.Error(fmt.Sprintf(
-				"Unexpected alert notice.\nExpected: %s\nActual: %s",
-				expectedAlertNotice, alertNotice))
+				"Unexpected alert msg.\nExpected: %s\nActual: %s",
+				expectedAlertMsg, alertMsg))
 		}
 	}
 }
@@ -181,17 +181,17 @@ func TestInvalidDataReturnsError(t *testing.T) {
 	}
 }
 
-func TestTemplateErrorsCreateRawAlertNotice(t *testing.T) {
+func TestTemplateErrorsCreateRawAlertMsg(t *testing.T) {
 	listener := NewFakeHTTPListener()
 	testingConfig := MakeHTTPTestingConfig()
-	testingConfig.NoticeTemplate = "Bogus template {{ nil }}"
+	testingConfig.MsgTemplate = "Bogus template {{ nil }}"
 
-	expectedAlertNotices := []AlertNotice{
-		AlertNotice{
+	expectedAlertMsgs := []AlertMsg{
+		AlertMsg{
 			Channel: "#somechannel",
 			Alert:   `{"status":"resolved","labels":{"alertname":"airDown","instance":"instance1:3456","job":"air","service":"prometheus","severity":"ticket","zone":"global"},"annotations":{"DESCRIPTION":"service /prometheus has irc gateway down on instance1","SUMMARY":"service /prometheus air down on instance1"},"startsAt":"2017-05-15T13:49:37.834Z","endsAt":"2017-05-15T13:50:37.835Z","generatorURL":"https://prometheus.example.com/prometheus/...","fingerprint":"66214a361160fb6f"}`,
 		},
-		AlertNotice{
+		AlertMsg{
 			Channel: "#somechannel",
 			Alert:   `{"status":"resolved","labels":{"alertname":"airDown","instance":"instance2:7890","job":"air","service":"prometheus","severity":"ticket","zone":"global"},"annotations":{"DESCRIPTION":"service /prometheus has irc gateway down on instance2","SUMMARY":"service /prometheus air down on instance2"},"startsAt":"2017-05-15T11:47:37.834Z","endsAt":"2017-05-15T11:48:37.834Z","generatorURL":"https://prometheus.example.com/prometheus/...","fingerprint":"25a874c99325d1ce"}`,
 		},
@@ -207,12 +207,12 @@ func TestTemplateErrorsCreateRawAlertNotice(t *testing.T) {
 			expectedStatusCode, response.StatusCode))
 	}
 
-	for _, expectedAlertNotice := range expectedAlertNotices {
-		alertNotice := <-listener.AlertNotices
-		if !reflect.DeepEqual(expectedAlertNotice, alertNotice) {
+	for _, expectedAlertMsg := range expectedAlertMsgs {
+		alertMsg := <-listener.AlertMsgs
+		if !reflect.DeepEqual(expectedAlertMsg, alertMsg) {
 			t.Error(fmt.Sprintf(
-				"Unexpected alert notice.\nExpected: %s\nActual: %s",
-				expectedAlertNotice, alertNotice))
+				"Unexpected alert msg.\nExpected: %s\nActual: %s",
+				expectedAlertMsg, alertMsg))
 		}
 	}
 }

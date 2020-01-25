@@ -14,6 +14,6 @@
 
 package main
 
-type AlertNotice struct {
+type AlertMsg struct {
 	Channel, Alert string
 }

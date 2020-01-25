@@ -34,15 +34,15 @@ func TestNoConfig(t *testing.T) {
 
 func TestLoadGoodConfig(t *testing.T) {
 	expectedConfig := &Config{
-		HTTPHost:       "test.web",
-		HTTPPort:       8888,
-		IRCNick:        "foo",
-		IRCHost:        "irc.example.com",
-		IRCPort:        1234,
-		IRCUseSSL:      true,
-		IRCChannels:    []IRCChannel{IRCChannel{Name: "#foobar"}},
-		NoticeTemplate: defaultNoticeTemplate,
-		NoticeOnce:     false,
+		HTTPHost:    "test.web",
+		HTTPPort:    8888,
+		IRCNick:     "foo",
+		IRCHost:     "irc.example.com",
+		IRCPort:     1234,
+		IRCUseSSL:   true,
+		IRCChannels: []IRCChannel{IRCChannel{Name: "#foobar"}},
+		MsgTemplate: defaultMsgTemplate,
+		MsgOnce:     false,
 	}
 	expectedData, err := yaml.Marshal(expectedConfig)
 	if err != nil {
@@ -110,15 +110,15 @@ func TestLoadBadConfig(t *testing.T) {
 	}
 }
 
-func TestNoticeOnceDefaultTemplate(t *testing.T) {
+func TestMsgOnceDefaultTemplate(t *testing.T) {
 	tmpfile, err := ioutil.TempFile("", "airtesttemmplateonceconfig")
 	if err != nil {
 		t.Errorf("Could not create tmpfile for testing: %s", err)
 	}
 	defer os.Remove(tmpfile.Name())
 
-	noticeOnceConfigData := []byte("notice_once_per_alert_group: yes")
-	if _, err := tmpfile.Write(noticeOnceConfigData); err != nil {
+	msgOnceConfigData := []byte("msg_once_per_alert_group: yes")
+	if _, err := tmpfile.Write(msgOnceConfigData); err != nil {
 		t.Errorf("Could not write test data in tmpfile: %s", err)
 	}
 	tmpfile.Close()
@@ -128,12 +128,12 @@ func TestNoticeOnceDefaultTemplate(t *testing.T) {
 		t.Errorf("Expected a config, got: %s", err)
 	}
 
-	if config.NoticeTemplate != defaultNoticeOnceTemplate {
-		t.Errorf("Expecting defaultNoticeOnceTemplate when NoticeOnce is true")
+	if config.MsgTemplate != defaultMsgOnceTemplate {
+		t.Errorf("Expecting defaultMsgOnceTemplate when MsgOnce is true")
 	}
 }
 
-func TestNoticeDefaultTemplate(t *testing.T) {
+func TestMsgDefaultTemplate(t *testing.T) {
 	tmpfile, err := ioutil.TempFile("", "airtesttemmplateconfig")
 	if err != nil {
 		t.Errorf("Could not create tmpfile for testing: %s", err)
@@ -150,8 +150,8 @@ func TestNoticeDefaultTemplate(t *testing.T) {
 		t.Errorf("Expected a config, got: %s", err)
 	}
 
-	if config.NoticeTemplate != defaultNoticeTemplate {
-		t.Errorf("Expecting defaultNoticeTemplate when NoticeOnce is false")
+	if config.MsgTemplate != defaultMsgTemplate {
+		t.Errorf("Expecting defaultMsgTemplate when MsgOnce is false")
 	}
 }
 
@@ -163,7 +163,7 @@ func TestGivenTemplateNotOverwritten(t *testing.T) {
 	defer os.Remove(tmpfile.Name())
 
 	expectedTemplate := "Alert {{ .Status }}: {{ .Annotations.SUMMARY }}"
-	configData := []byte(fmt.Sprintf("notice_template: \"%s\"", expectedTemplate))
+	configData := []byte(fmt.Sprintf("msg_template: \"%s\"", expectedTemplate))
 	if _, err := tmpfile.Write(configData); err != nil {
 		t.Errorf("Could not write test data in tmpfile: %s", err)
 	}
@@ -174,7 +174,7 @@ func TestGivenTemplateNotOverwritten(t *testing.T) {
 		t.Errorf("Expected a config, got: %s", err)
 	}
 
-	if config.NoticeTemplate != expectedTemplate {
+	if config.MsgTemplate != expectedTemplate {
 		t.Errorf("Template does not match configuration")
 	}
 }

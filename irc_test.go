@@ -215,16 +215,16 @@ func makeTestIRCConfig(IRCPort int) *Config {
 	}
 }
 
-func makeTestNotifier(t *testing.T, config *Config) (*IRCNotifier, chan AlertNotice) {
-	alertNotices := make(chan AlertNotice)
-	notifier, err := NewIRCNotifier(config, alertNotices)
+func makeTestNotifier(t *testing.T, config *Config) (*IRCNotifier, chan AlertMsg) {
+	alertMsgs := make(chan AlertMsg)
+	notifier, err := NewIRCNotifier(config, alertMsgs)
 	if err != nil {
 		t.Fatal(fmt.Sprintf("Could not create IRC notifier: %s", err))
 	}
 	notifier.Client.Config().Flood = true
 	notifier.BackoffCounter = &FakeDelayer{}
 
-	return notifier, alertNotices
+	return notifier, alertMsgs
 }
 
 func TestPreJoinChannels(t *testing.T) {
@@ -268,7 +268,7 @@ func TestPreJoinChannels(t *testing.T) {
 func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
-	notifier, alertNotices := makeTestNotifier(t, config)
+	notifier, alertMsgs := makeTestNotifier(t, config)
 
 	var testStep sync.WaitGroup
 
@@ -299,7 +299,7 @@ func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 	server.SetHandler("NOTICE", noticeHandler)
 
 	testStep.Add(1)
-	alertNotices <- AlertNotice{Channel: testChannel, Alert: testMessage}
+	alertMsgs <- AlertMsg{Channel: testChannel, Alert: testMessage}
 
 	testStep.Wait()
 
@@ -324,7 +324,7 @@ func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 func TestSendAlertAndJoinChannel(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
-	notifier, alertNotices := makeTestNotifier(t, config)
+	notifier, alertMsgs := makeTestNotifier(t, config)
 
 	var testStep sync.WaitGroup
 
@@ -356,7 +356,7 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 	server.SetHandler("NOTICE", noticeHandler)
 
 	testStep.Add(1)
-	alertNotices <- AlertNotice{Channel: testChannel, Alert: testMessage}
+	alertMsgs <- AlertMsg{Channel: testChannel, Alert: testMessage}
 
 	testStep.Wait()
 
@@ -383,7 +383,7 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 func TestSendAlertDisconnected(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
-	notifier, alertNotices := makeTestNotifier(t, config)
+	notifier, alertMsgs := makeTestNotifier(t, config)
 
 	var testStep, holdUserStep sync.WaitGroup
 
@@ -405,7 +405,7 @@ func TestSendAlertDisconnected(t *testing.T) {
 
 	go notifier.Run()
 
-	alertNotices <- AlertNotice{Channel: testChannel, Alert: disconnectedTestMessage}
+	alertMsgs <- AlertMsg{Channel: testChannel, Alert: disconnectedTestMessage}
 
 	testStep.Done()
 	holdUserStep.Wait()
@@ -432,7 +432,7 @@ func TestSendAlertDisconnected(t *testing.T) {
 	}
 	server.SetHandler("NOTICE", noticeHandler)
 
-	alertNotices <- AlertNotice{Channel: testChannel, Alert: connectedTestMessage}
+	alertMsgs <- AlertMsg{Channel: testChannel, Alert: connectedTestMessage}
 
 	testStep.Wait()
 

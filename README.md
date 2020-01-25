@@ -36,7 +36,7 @@ irc_realname: myrealname
 # Optionally pre-join certain channels.
 #
 # Note: If an alert is sent to a non # pre-joined channel the bot will join
-# that channel anyway before sending the notice. Of course this cannot work
+# that channel anyway before sending the message. Of course this cannot work
 # with password-protected channels.
 irc_channels:
   - name: "#mychannel"
@@ -45,16 +45,16 @@ irc_channels:
 
 # Define how IRC messages should be sent.
 #
-# Send only one notice when webhook data is received.
-# Note: By default a notice is sent for each alert in the webhook data.
-notice_once_per_alert_group: no
+# Send only one message when webhook data is received.
+# Note: By default a message is sent for each alert in the webhook data.
+msg_once_per_alert_group: no
 
 # Define how IRC messages should be formatted.
 #
 # The formatting is based on golang's text/template .
-notice_template: "Alert {{ .Labels.alertname }} on {{ .Labels.instance }} is {{ .Status }}"
-# Note: When sending only one notice per alert group the default
-# notice_template is set to
+msg_template: "Alert {{ .Labels.alertname }} on {{ .Labels.instance }} is {{ .Status }}"
+# Note: When sending only one message per alert group the default
+# msg_template is set to
 # "Alert {{ .GroupLabels.alertname }} for {{ .GroupLabels.job }} is {{ .Status }}"
 ```
 

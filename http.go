@@ -35,20 +35,20 @@ type HTTPServer struct {
 	StoppedRunning chan bool
 	Addr           string
 	Port           int
-	NoticeTemplate *template.Template
-	NoticeOnce     bool
-	AlertNotices   chan AlertNotice
+	MsgTemplate    *template.Template
+	MsgOnce        bool
+	AlertMsgs      chan AlertMsg
 	httpListener   HTTPListener
 }
 
-func NewHTTPServer(config *Config, alertNotices chan AlertNotice) (
+func NewHTTPServer(config *Config, alertMsgs chan AlertMsg) (
 	*HTTPServer, error) {
-	return NewHTTPServerForTesting(config, alertNotices, http.ListenAndServe)
+	return NewHTTPServerForTesting(config, alertMsgs, http.ListenAndServe)
 }
 
-func NewHTTPServerForTesting(config *Config, alertNotices chan AlertNotice,
+func NewHTTPServerForTesting(config *Config, alertMsgs chan AlertMsg,
 	httpListener HTTPListener) (*HTTPServer, error) {
-	tmpl, err := template.New("notice").Parse(config.NoticeTemplate)
+	tmpl, err := template.New("msg").Parse(config.MsgTemplate)
 	if err != nil {
 		return nil, err
 	}
@@ -56,22 +56,22 @@ func NewHTTPServerForTesting(config *Config, alertNotices chan AlertNotice,
 		StoppedRunning: make(chan bool),
 		Addr:           config.HTTPHost,
 		Port:           config.HTTPPort,
-		NoticeTemplate: tmpl,
-		NoticeOnce:     config.NoticeOnce,
-		AlertNotices:   alertNotices,
+		MsgTemplate:    tmpl,
+		MsgOnce:        config.MsgOnce,
+		AlertMsgs:      alertMsgs,
 		httpListener:   httpListener,
 	}
 
 	return server, nil
 }
 
-func (server *HTTPServer) FormatNotice(data interface{}) string {
+func (server *HTTPServer) FormatMsg(data interface{}) string {
 	output := bytes.Buffer{}
 	var msg string
-	if err := server.NoticeTemplate.Execute(&output, data); err != nil {
+	if err := server.MsgTemplate.Execute(&output, data); err != nil {
 		msg_bytes, _ := json.Marshal(data)
 		msg = string(msg_bytes)
-		log.Printf("Could not apply notice template on alert (%s): %s",
+		log.Printf("Could not apply msg template on alert (%s): %s",
 			err, msg)
 		log.Printf("Sending raw alert")
 	} else {
@@ -80,21 +80,21 @@ func (server *HTTPServer) FormatNotice(data interface{}) string {
 	return msg
 }
 
-func (server *HTTPServer) GetNoticesFromAlertMessage(ircChannel string,
-	data *promtmpl.Data) []AlertNotice {
-	notices := []AlertNotice{}
-	if server.NoticeOnce {
-		msg := server.FormatNotice(data)
-		notices = append(notices,
-			AlertNotice{Channel: ircChannel, Alert: msg})
+func (server *HTTPServer) GetMsgsFromAlertMessage(ircChannel string,
+	data *promtmpl.Data) []AlertMsg {
+	msgs := []AlertMsg{}
+	if server.MsgOnce {
+		msg := server.FormatMsg(data)
+		msgs = append(msgs,
+			AlertMsg{Channel: ircChannel, Alert: msg})
 	} else {
 		for _, alert := range data.Alerts {
-			msg := server.FormatNotice(alert)
-			notices = append(notices,
-				AlertNotice{Channel: ircChannel, Alert: msg})
+			msg := server.FormatMsg(alert)
+			msgs = append(msgs,
+				AlertMsg{Channel: ircChannel, Alert: msg})
 		}
 	}
-	return notices
+	return msgs
 }
 
 func (server *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
@@ -119,13 +119,13 @@ func (server *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	for _, alertNotice := range server.GetNoticesFromAlertMessage(
+	for _, alertMsg := range server.GetMsgsFromAlertMessage(
 		ircChannel, &alertMessage) {
 		select {
-		case server.AlertNotices <- alertNotice:
+		case server.AlertMsgs <- alertMsg:
 		default:
 			log.Printf("Could not send this alert to the IRC routine: %s",
-				alertNotice)
+				alertMsg)
 		}
 	}
 }

@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	defaultNoticeOnceTemplate = "Alert {{ .GroupLabels.alertname }} for {{ .GroupLabels.job }} is {{ .Status }}"
-	defaultNoticeTemplate     = "Alert {{ .Labels.alertname }} on {{ .Labels.instance }} is {{ .Status }}"
+	defaultMsgOnceTemplate = "Alert {{ .GroupLabels.alertname }} for {{ .GroupLabels.job }} is {{ .Status }}"
+	defaultMsgTemplate     = "Alert {{ .Labels.alertname }} on {{ .Labels.instance }} is {{ .Status }}"
 )
 
 type IRCChannel struct {
@@ -30,17 +30,17 @@ type IRCChannel struct {
 }
 
 type Config struct {
-	HTTPHost       string       `yaml:"http_host"`
-	HTTPPort       int          `yaml:"http_port"`
-	IRCNick        string       `yaml:"irc_nickname"`
-	IRCNickPass    string       `yaml:"irc_nickname_password"`
-	IRCRealName    string       `yaml:"irc_realname"`
-	IRCHost        string       `yaml:"irc_host"`
-	IRCPort        int          `yaml:"irc_port"`
-	IRCUseSSL      bool         `yaml:"irc_use_ssl"`
-	IRCChannels    []IRCChannel `yaml:"irc_channels"`
-	NoticeTemplate string       `yaml:"notice_template"`
-	NoticeOnce     bool         `yaml:"notice_once_per_alert_group"`
+	HTTPHost    string       `yaml:"http_host"`
+	HTTPPort    int          `yaml:"http_port"`
+	IRCNick     string       `yaml:"irc_nickname"`
+	IRCNickPass string       `yaml:"irc_nickname_password"`
+	IRCRealName string       `yaml:"irc_realname"`
+	IRCHost     string       `yaml:"irc_host"`
+	IRCPort     int          `yaml:"irc_port"`
+	IRCUseSSL   bool         `yaml:"irc_use_ssl"`
+	IRCChannels []IRCChannel `yaml:"irc_channels"`
+	MsgTemplate string       `yaml:"msg_template"`
+	MsgOnce     bool         `yaml:"msg_once_per_alert_group"`
 }
 
 func LoadConfig(configFile string) (*Config, error) {
@@ -54,7 +54,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		IRCPort:     7000,
 		IRCUseSSL:   true,
 		IRCChannels: []IRCChannel{IRCChannel{Name: "#airtest"}},
-		NoticeOnce:  false,
+		MsgOnce:     false,
 	}
 
 	if configFile != "" {
@@ -68,11 +68,11 @@ func LoadConfig(configFile string) (*Config, error) {
 	}
 
 	// Set default template if config does not have one.
-	if config.NoticeTemplate == "" {
-		if config.NoticeOnce {
-			config.NoticeTemplate = defaultNoticeOnceTemplate
+	if config.MsgTemplate == "" {
+		if config.MsgOnce {
+			config.MsgTemplate = defaultMsgOnceTemplate
 		} else {
-			config.NoticeTemplate = defaultNoticeTemplate
+			config.MsgTemplate = defaultMsgTemplate
 		}
 	}
 

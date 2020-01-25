@@ -48,7 +48,7 @@ type IRCNotifier struct {
 	Client         *irc.Conn
 	StopRunning    chan bool
 	StoppedRunning chan bool
-	AlertNotices   chan AlertNotice
+	AlertMsgs      chan AlertMsg
 
 	// irc.Conn has a Connected() method that can tell us wether the TCP
 	// connection is up, and thus if we should trigger connect/disconnect.
@@ -66,7 +66,7 @@ type IRCNotifier struct {
 	BackoffCounter    Delayer
 }
 
-func NewIRCNotifier(config *Config, alertNotices chan AlertNotice) (*IRCNotifier, error) {
+func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, error) {
 
 	ircConfig := irc.NewConfig(config.IRCNick)
 	ircConfig.Me.Ident = config.IRCNick
@@ -89,7 +89,7 @@ func NewIRCNotifier(config *Config, alertNotices chan AlertNotice) (*IRCNotifier
 		Client:            irc.Client(ircConfig),
 		StopRunning:       make(chan bool),
 		StoppedRunning:    make(chan bool),
-		AlertNotices:      alertNotices,
+		AlertMsgs:         alertMsgs,
 		sessionUpSignal:   make(chan bool),
 		sessionDownSignal: make(chan bool),
 		PreJoinChannels:   config.IRCChannels,
@@ -189,14 +189,14 @@ func (notifier *IRCNotifier) MaybeIdentifyNick() {
 	time.Sleep(notifier.NickservDelayWait)
 }
 
-func (notifier *IRCNotifier) MaybeSendAlertNotice(alertNotice *AlertNotice) {
+func (notifier *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
 	if !notifier.sessionUp {
 		log.Printf("Cannot send alert to %s : IRC not connected",
-			alertNotice.Channel)
+			alertMsg.Channel)
 		return
 	}
-	notifier.JoinChannel(&IRCChannel{Name: alertNotice.Channel})
-	notifier.Client.Notice(alertNotice.Channel, alertNotice.Alert)
+	notifier.JoinChannel(&IRCChannel{Name: alertMsg.Channel})
+	notifier.Client.Notice(alertMsg.Channel, alertMsg.Alert)
 }
 
 func (notifier *IRCNotifier) Run() {
@@ -219,8 +219,8 @@ func (notifier *IRCNotifier) Run() {
 		}
 
 		select {
-		case alertNotice := <-notifier.AlertNotices:
-			notifier.MaybeSendAlertNotice(&alertNotice)
+		case alertMsg := <-notifier.AlertMsgs:
+			notifier.MaybeSendAlertMsg(&alertMsg)
 		case <-notifier.sessionUpSignal:
 			notifier.sessionUp = true
 			notifier.MaybeIdentifyNick()

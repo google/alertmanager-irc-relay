@@ -37,16 +37,16 @@ func main() {
 		return
 	}
 
-	alertNotices := make(chan AlertNotice, 10)
+	alertMsgs := make(chan AlertMsg, 10)
 
-	ircNotifier, err := NewIRCNotifier(config, alertNotices)
+	ircNotifier, err := NewIRCNotifier(config, alertMsgs)
 	if err != nil {
 		log.Printf("Could not create IRC notifier: %s", err)
 		return
 	}
 	go ircNotifier.Run()
 
-	httpServer, err := NewHTTPServer(config, alertNotices)
+	httpServer, err := NewHTTPServer(config, alertMsgs)
 	if err != nil {
 		log.Printf("Could not create HTTP server: %s", err)
 		return
