@@ -40,6 +40,7 @@ const (
             },
             "endsAt": "2017-05-15T13:50:37.835Z",
             "generatorURL": "https://prometheus.example.com/prometheus/...",
+	    "fingerprint": "66214a361160fb6f",
             "labels": {
                 "alertname": "airDown",
                 "instance": "instance1:3456",
@@ -58,6 +59,7 @@ const (
             },
             "endsAt": "2017-05-15T11:48:37.834Z",
             "generatorURL": "https://prometheus.example.com/prometheus/...",
+	    "fingerprint": "25a874c99325d1ce",
             "labels": {
                 "alertname": "airDown",
                 "instance": "instance2:7890",

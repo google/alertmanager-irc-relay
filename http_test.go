@@ -189,11 +189,11 @@ func TestTemplateErrorsCreateRawAlertNotice(t *testing.T) {
 	expectedAlertNotices := []AlertNotice{
 		AlertNotice{
 			Channel: "#somechannel",
-			Alert:   `{"status":"resolved","labels":{"alertname":"airDown","instance":"instance1:3456","job":"air","service":"prometheus","severity":"ticket","zone":"global"},"annotations":{"DESCRIPTION":"service /prometheus has irc gateway down on instance1","SUMMARY":"service /prometheus air down on instance1"},"startsAt":"2017-05-15T13:49:37.834Z","endsAt":"2017-05-15T13:50:37.835Z","generatorURL":"https://prometheus.example.com/prometheus/..."}`,
+			Alert:   `{"status":"resolved","labels":{"alertname":"airDown","instance":"instance1:3456","job":"air","service":"prometheus","severity":"ticket","zone":"global"},"annotations":{"DESCRIPTION":"service /prometheus has irc gateway down on instance1","SUMMARY":"service /prometheus air down on instance1"},"startsAt":"2017-05-15T13:49:37.834Z","endsAt":"2017-05-15T13:50:37.835Z","generatorURL":"https://prometheus.example.com/prometheus/...","fingerprint":"66214a361160fb6f"}`,
 		},
 		AlertNotice{
 			Channel: "#somechannel",
-			Alert:   `{"status":"resolved","labels":{"alertname":"airDown","instance":"instance2:7890","job":"air","service":"prometheus","severity":"ticket","zone":"global"},"annotations":{"DESCRIPTION":"service /prometheus has irc gateway down on instance2","SUMMARY":"service /prometheus air down on instance2"},"startsAt":"2017-05-15T11:47:37.834Z","endsAt":"2017-05-15T11:48:37.834Z","generatorURL":"https://prometheus.example.com/prometheus/..."}`,
+			Alert:   `{"status":"resolved","labels":{"alertname":"airDown","instance":"instance2:7890","job":"air","service":"prometheus","severity":"ticket","zone":"global"},"annotations":{"DESCRIPTION":"service /prometheus has irc gateway down on instance2","SUMMARY":"service /prometheus air down on instance2"},"startsAt":"2017-05-15T11:47:37.834Z","endsAt":"2017-05-15T11:48:37.834Z","generatorURL":"https://prometheus.example.com/prometheus/...","fingerprint":"25a874c99325d1ce"}`,
 		},
 	}
 	expectedStatusCode := 200
