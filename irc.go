@@ -16,11 +16,12 @@ package main
 
 import (
 	"crypto/tls"
-	irc "github.com/fluffle/goirc/client"
 	"log"
 	"strconv"
 	"strings"
 	"time"
+
+	irc "github.com/fluffle/goirc/client"
 )
 
 const (
@@ -131,7 +132,7 @@ func (notifier *IRCNotifier) HandleKick(nick string, channel string) {
 		return
 	}
 	state, ok := notifier.JoinedChannels[channel]
-	if ok == false {
+	if !ok {
 		log.Printf("Being kicked out of non-joined channel (%s), ignoring", channel)
 		return
 	}
@@ -149,7 +150,7 @@ func (notifier *IRCNotifier) CleanupChannels() {
 }
 
 func (notifier *IRCNotifier) JoinChannel(channel *IRCChannel) {
-	if _, joined := notifier.JoinedChannels[channel.Name]; joined == true {
+	if _, joined := notifier.JoinedChannels[channel.Name]; joined {
 		return
 	}
 	log.Printf("Joining %s", channel.Name)

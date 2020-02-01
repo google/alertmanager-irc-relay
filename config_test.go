@@ -16,10 +16,11 @@ package main
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
 	"testing"
+
+	"gopkg.in/yaml.v2"
 )
 
 func TestNoConfig(t *testing.T) {
@@ -87,8 +88,8 @@ func TestLoadBadFile(t *testing.T) {
 	os.Remove(tmpfile.Name())
 
 	config, err := LoadConfig(tmpfile.Name())
-	if config != nil {
-		t.Errorf("Expected no config upon non-existent file.")
+	if err == nil || config != nil {
+		t.Errorf("Expected no config upon non-existent file. err: %s", err)
 	}
 }
 
@@ -106,8 +107,8 @@ func TestLoadBadConfig(t *testing.T) {
 	tmpfile.Close()
 
 	config, err := LoadConfig(tmpfile.Name())
-	if config != nil {
-		t.Errorf("Expected no config upon bad config.")
+	if err == nil || config != nil {
+		t.Errorf("Expected no config upon bad config. err: %s", err)
 	}
 }
 
