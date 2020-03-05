@@ -52,11 +52,11 @@ func LoadConfig(configFile string) (*Config, error) {
 		IRCNick:      "alertmanager-irc-relay",
 		IRCNickPass:  "",
 		IRCRealName:  "Alertmanager IRC Relay",
-		IRCHost:      "irc.freenode.net",
+		IRCHost:      "example.com",
 		IRCPort:      7000,
 		IRCUseSSL:    true,
 		IRCVerifySSL: true,
-		IRCChannels:  []IRCChannel{IRCChannel{Name: "#airtest"}},
+		IRCChannels:  []IRCChannel{},
 		MsgOnce:      false,
 		UsePrivmsg:   false,
 	}

@@ -215,7 +215,7 @@ func (notifier *IRCNotifier) Run() {
 	keepGoing := true
 	for keepGoing {
 		if !notifier.Client.Connected() {
-			log.Printf("Connecting to IRC")
+			log.Printf("Connecting to IRC %s", notifier.Client.Config().Server)
 			notifier.BackoffCounter.Delay()
 			if err := notifier.Client.Connect(); err != nil {
 				log.Printf("Could not connect to IRC: %s", err)
