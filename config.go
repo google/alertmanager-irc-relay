@@ -30,33 +30,35 @@ type IRCChannel struct {
 }
 
 type Config struct {
-	HTTPHost    string       `yaml:"http_host"`
-	HTTPPort    int          `yaml:"http_port"`
-	IRCNick     string       `yaml:"irc_nickname"`
-	IRCNickPass string       `yaml:"irc_nickname_password"`
-	IRCRealName string       `yaml:"irc_realname"`
-	IRCHost     string       `yaml:"irc_host"`
-	IRCPort     int          `yaml:"irc_port"`
-	IRCUseSSL   bool         `yaml:"irc_use_ssl"`
-	IRCChannels []IRCChannel `yaml:"irc_channels"`
-	MsgTemplate string       `yaml:"msg_template"`
-	MsgOnce     bool         `yaml:"msg_once_per_alert_group"`
-	UsePrivmsg  bool         `yaml:"use_privmsg"`
+	HTTPHost     string       `yaml:"http_host"`
+	HTTPPort     int          `yaml:"http_port"`
+	IRCNick      string       `yaml:"irc_nickname"`
+	IRCNickPass  string       `yaml:"irc_nickname_password"`
+	IRCRealName  string       `yaml:"irc_realname"`
+	IRCHost      string       `yaml:"irc_host"`
+	IRCPort      int          `yaml:"irc_port"`
+	IRCUseSSL    bool         `yaml:"irc_use_ssl"`
+	IRCVerifySSL bool         `yaml:"irc_verify_ssl"`
+	IRCChannels  []IRCChannel `yaml:"irc_channels"`
+	MsgTemplate  string       `yaml:"msg_template"`
+	MsgOnce      bool         `yaml:"msg_once_per_alert_group"`
+	UsePrivmsg   bool         `yaml:"use_privmsg"`
 }
 
 func LoadConfig(configFile string) (*Config, error) {
 	config := &Config{
-		HTTPHost:    "localhost",
-		HTTPPort:    8000,
-		IRCNick:     "alertmanager-irc-relay",
-		IRCNickPass: "",
-		IRCRealName: "Alertmanager IRC Relay",
-		IRCHost:     "irc.freenode.net",
-		IRCPort:     7000,
-		IRCUseSSL:   true,
-		IRCChannels: []IRCChannel{IRCChannel{Name: "#airtest"}},
-		MsgOnce:     false,
-		UsePrivmsg:  false,
+		HTTPHost:     "localhost",
+		HTTPPort:     8000,
+		IRCNick:      "alertmanager-irc-relay",
+		IRCNickPass:  "",
+		IRCRealName:  "Alertmanager IRC Relay",
+		IRCHost:      "irc.freenode.net",
+		IRCPort:      7000,
+		IRCUseSSL:    true,
+		IRCVerifySSL: true,
+		IRCChannels:  []IRCChannel{IRCChannel{Name: "#airtest"}},
+		MsgOnce:      false,
+		UsePrivmsg:   false,
 	}
 
 	if configFile != "" {

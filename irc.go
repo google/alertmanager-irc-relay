@@ -77,7 +77,10 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, erro
 	ircConfig.Server = strings.Join(
 		[]string{config.IRCHost, strconv.Itoa(config.IRCPort)}, ":")
 	ircConfig.SSL = config.IRCUseSSL
-	ircConfig.SSLConfig = &tls.Config{ServerName: config.IRCHost}
+	ircConfig.SSLConfig = &tls.Config{
+		ServerName:         config.IRCHost,
+		InsecureSkipVerify: !config.IRCVerifySSL,
+	}
 	ircConfig.PingFreq = pingFrequencySecs * time.Second
 	ircConfig.Timeout = connectionTimeoutSecs * time.Second
 	ircConfig.NewNick = func(n string) string { return n + "^" }
