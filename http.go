@@ -21,12 +21,33 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-
-	"github.com/gorilla/mux"
-	promtmpl "github.com/prometheus/alertmanager/template"
 	"strconv"
 	"strings"
 	"text/template"
+
+	"github.com/gorilla/mux"
+	promtmpl "github.com/prometheus/alertmanager/template"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var (
+	handledAlertGroups = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "webhook_handled_alert_groups",
+		Help: "Number of alert groups received"},
+		[]string{"ircchannel"},
+	)
+	handledAlerts = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "webhook_handled_alerts",
+		Help: "Number of single alert messages relayed"},
+		[]string{"ircchannel"},
+	)
+	alertHandlingErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "webhook_alert_handling_errors",
+		Help: "Errors while processing webhook requests"},
+		[]string{"ircchannel", "error"},
+	)
 )
 
 type HTTPListener func(string, http.Handler) error
@@ -65,7 +86,7 @@ func NewHTTPServerForTesting(config *Config, alertMsgs chan AlertMsg,
 	return server, nil
 }
 
-func (server *HTTPServer) FormatMsg(data interface{}) string {
+func (server *HTTPServer) FormatMsg(ircChannel string, data interface{}) string {
 	output := bytes.Buffer{}
 	var msg string
 	if err := server.MsgTemplate.Execute(&output, data); err != nil {
@@ -74,6 +95,7 @@ func (server *HTTPServer) FormatMsg(data interface{}) string {
 		log.Printf("Could not apply msg template on alert (%s): %s",
 			err, msg)
 		log.Printf("Sending raw alert")
+		alertHandlingErrors.WithLabelValues(ircChannel, "format_msg").Inc()
 	} else {
 		msg = output.String()
 	}
@@ -84,12 +106,12 @@ func (server *HTTPServer) GetMsgsFromAlertMessage(ircChannel string,
 	data *promtmpl.Data) []AlertMsg {
 	msgs := []AlertMsg{}
 	if server.MsgOnce {
-		msg := server.FormatMsg(data)
+		msg := server.FormatMsg(ircChannel, data)
 		msgs = append(msgs,
 			AlertMsg{Channel: ircChannel, Alert: msg})
 	} else {
 		for _, alert := range data.Alerts {
-			msg := server.FormatMsg(alert)
+			msg := server.FormatMsg(ircChannel, alert)
 			msgs = append(msgs,
 				AlertMsg{Channel: ircChannel, Alert: msg})
 		}
@@ -104,13 +126,14 @@ func (server *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1024*1024*1024))
 	if err != nil {
 		log.Printf("Could not get body: %s", err)
+		alertHandlingErrors.WithLabelValues(ircChannel, "read_body").Inc()
 		return
 	}
 
 	var alertMessage = promtmpl.Data{}
 	if err := json.Unmarshal(body, &alertMessage); err != nil {
 		log.Printf("Could not decode request body (%s): %s", err, body)
-
+		alertHandlingErrors.WithLabelValues(ircChannel, "decode_body").Inc()
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		w.WriteHeader(422) // Unprocessable entity
 		if err := json.NewEncoder(w).Encode(err); err != nil {
@@ -119,19 +142,24 @@ func (server *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	handledAlertGroups.WithLabelValues(ircChannel).Inc()
 	for _, alertMsg := range server.GetMsgsFromAlertMessage(
 		ircChannel, &alertMessage) {
 		select {
 		case server.AlertMsgs <- alertMsg:
+			handledAlerts.WithLabelValues(ircChannel).Inc()
 		default:
 			log.Printf("Could not send this alert to the IRC routine: %s",
 				alertMsg)
+			alertHandlingErrors.WithLabelValues(ircChannel, "internal_comm_channel_full").Inc()
 		}
 	}
 }
 
 func (server *HTTPServer) Run() {
 	router := mux.NewRouter().StrictSlash(true)
+
+	router.Path("/metrics").Handler(promhttp.Handler())
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		server.RelayAlert(w, r)

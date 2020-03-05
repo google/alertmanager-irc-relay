@@ -22,6 +22,8 @@ import (
 	"time"
 
 	irc "github.com/fluffle/goirc/client"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 const (
@@ -30,6 +32,23 @@ const (
 	nickservWaitSecs           = 10
 	ircConnectMaxBackoffSecs   = 300
 	ircConnectBackoffResetSecs = 1800
+)
+
+var (
+	ircConnectedGauge = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "irc_connected",
+		Help: "Wether the IRC connection is established",
+	})
+	ircSentMsgs = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "irc_sent_msgs",
+		Help: "Number of IRC messages sent"},
+		[]string{"ircchannel"},
+	)
+	ircSendMsgErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "irc_send_msg_errors",
+		Help: "Errors while sending IRC messages"},
+		[]string{"ircchannel", "error"},
+	)
 )
 
 func loggerHandler(_ *irc.Conn, line *irc.Line) {
@@ -200,6 +219,7 @@ func (notifier *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
 	if !notifier.sessionUp {
 		log.Printf("Cannot send alert to %s : IRC not connected",
 			alertMsg.Channel)
+		ircSendMsgErrors.WithLabelValues(alertMsg.Channel, "not_connected").Inc()
 		return
 	}
 	notifier.JoinChannel(&IRCChannel{Name: alertMsg.Channel})
@@ -209,6 +229,7 @@ func (notifier *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
 	} else {
 		notifier.Client.Notice(alertMsg.Channel, alertMsg.Alert)
 	}
+	ircSentMsgs.WithLabelValues(alertMsg.Channel).Inc()
 }
 
 func (notifier *IRCNotifier) Run() {
@@ -237,10 +258,12 @@ func (notifier *IRCNotifier) Run() {
 			notifier.sessionUp = true
 			notifier.MaybeIdentifyNick()
 			notifier.JoinChannels()
+			ircConnectedGauge.Set(1)
 		case <-notifier.sessionDownSignal:
 			notifier.sessionUp = false
 			notifier.CleanupChannels()
 			notifier.Client.Quit("see ya")
+			ircConnectedGauge.Set(0)
 		case <-notifier.StopRunning:
 			log.Printf("IRC routine asked to terminate")
 			keepGoing = false
