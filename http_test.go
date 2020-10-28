@@ -116,39 +116,6 @@ func TestAlertsDispatched(t *testing.T) {
 	}
 }
 
-func TestAlertsDispatchedOnce(t *testing.T) {
-	listener := NewFakeHTTPListener()
-	testingConfig := MakeHTTPTestingConfig()
-	testingConfig.MsgOnce = true
-	testingConfig.MsgTemplate = "Alert {{ .GroupLabels.alertname }} is {{ .Status }}"
-
-	expectedAlertMsgs := []AlertMsg{
-		AlertMsg{
-			Channel: "#somechannel",
-			Alert:   "Alert airDown is resolved",
-		},
-	}
-	expectedStatusCode := 200
-
-	response := RunHTTPTest(
-		t, testdataSimpleAlertJson, "/somechannel",
-		testingConfig, listener)
-
-	if expectedStatusCode != response.StatusCode {
-		t.Error(fmt.Sprintf("Expected %d status in response, got %d",
-			expectedStatusCode, response.StatusCode))
-	}
-
-	for _, expectedAlertMsg := range expectedAlertMsgs {
-		alertMsg := <-listener.AlertMsgs
-		if !reflect.DeepEqual(expectedAlertMsg, alertMsg) {
-			t.Error(fmt.Sprintf(
-				"Unexpected alert msg.\nExpected: %s\nActual: %s",
-				expectedAlertMsg, alertMsg))
-		}
-	}
-}
-
 func TestRootReturnsError(t *testing.T) {
 	listener := NewFakeHTTPListener()
 	testingConfig := MakeHTTPTestingConfig()
@@ -178,41 +145,5 @@ func TestInvalidDataReturnsError(t *testing.T) {
 	if expectedStatusCode != response.StatusCode {
 		t.Error(fmt.Sprintf("Expected %d status in response, got %d",
 			expectedStatusCode, response.StatusCode))
-	}
-}
-
-func TestTemplateErrorsCreateRawAlertMsg(t *testing.T) {
-	listener := NewFakeHTTPListener()
-	testingConfig := MakeHTTPTestingConfig()
-	testingConfig.MsgTemplate = "Bogus template {{ nil }}"
-
-	expectedAlertMsgs := []AlertMsg{
-		AlertMsg{
-			Channel: "#somechannel",
-			Alert:   `{"status":"resolved","labels":{"alertname":"airDown","instance":"instance1:3456","job":"air","service":"prometheus","severity":"ticket","zone":"global"},"annotations":{"DESCRIPTION":"service /prometheus has irc gateway down on instance1","SUMMARY":"service /prometheus air down on instance1"},"startsAt":"2017-05-15T13:49:37.834Z","endsAt":"2017-05-15T13:50:37.835Z","generatorURL":"https://prometheus.example.com/prometheus/...","fingerprint":"66214a361160fb6f"}`,
-		},
-		AlertMsg{
-			Channel: "#somechannel",
-			Alert:   `{"status":"resolved","labels":{"alertname":"airDown","instance":"instance2:7890","job":"air","service":"prometheus","severity":"ticket","zone":"global"},"annotations":{"DESCRIPTION":"service /prometheus has irc gateway down on instance2","SUMMARY":"service /prometheus air down on instance2"},"startsAt":"2017-05-15T11:47:37.834Z","endsAt":"2017-05-15T11:48:37.834Z","generatorURL":"https://prometheus.example.com/prometheus/...","fingerprint":"25a874c99325d1ce"}`,
-		},
-	}
-	expectedStatusCode := 200
-
-	response := RunHTTPTest(
-		t, testdataSimpleAlertJson, "/somechannel",
-		testingConfig, listener)
-
-	if expectedStatusCode != response.StatusCode {
-		t.Error(fmt.Sprintf("Expected %d status in response, got %d",
-			expectedStatusCode, response.StatusCode))
-	}
-
-	for _, expectedAlertMsg := range expectedAlertMsgs {
-		alertMsg := <-listener.AlertMsgs
-		if !reflect.DeepEqual(expectedAlertMsg, alertMsg) {
-			t.Error(fmt.Sprintf(
-				"Unexpected alert msg.\nExpected: %s\nActual: %s",
-				expectedAlertMsg, alertMsg))
-		}
 	}
 }

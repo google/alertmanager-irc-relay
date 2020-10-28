@@ -15,7 +15,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -23,7 +22,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"text/template"
 
 	"github.com/gorilla/mux"
 	promtmpl "github.com/prometheus/alertmanager/template"
@@ -56,8 +54,7 @@ type HTTPServer struct {
 	StoppedRunning chan bool
 	Addr           string
 	Port           int
-	MsgTemplate    *template.Template
-	MsgOnce        bool
+	formatter      *Formatter
 	AlertMsgs      chan AlertMsg
 	httpListener   HTTPListener
 }
@@ -69,7 +66,7 @@ func NewHTTPServer(config *Config, alertMsgs chan AlertMsg) (
 
 func NewHTTPServerForTesting(config *Config, alertMsgs chan AlertMsg,
 	httpListener HTTPListener) (*HTTPServer, error) {
-	tmpl, err := template.New("msg").Parse(config.MsgTemplate)
+	formatter, err := NewFormatter(config)
 	if err != nil {
 		return nil, err
 	}
@@ -77,46 +74,12 @@ func NewHTTPServerForTesting(config *Config, alertMsgs chan AlertMsg,
 		StoppedRunning: make(chan bool),
 		Addr:           config.HTTPHost,
 		Port:           config.HTTPPort,
-		MsgTemplate:    tmpl,
-		MsgOnce:        config.MsgOnce,
+		formatter:      formatter,
 		AlertMsgs:      alertMsgs,
 		httpListener:   httpListener,
 	}
 
 	return server, nil
-}
-
-func (server *HTTPServer) FormatMsg(ircChannel string, data interface{}) string {
-	output := bytes.Buffer{}
-	var msg string
-	if err := server.MsgTemplate.Execute(&output, data); err != nil {
-		msg_bytes, _ := json.Marshal(data)
-		msg = string(msg_bytes)
-		log.Printf("Could not apply msg template on alert (%s): %s",
-			err, msg)
-		log.Printf("Sending raw alert")
-		alertHandlingErrors.WithLabelValues(ircChannel, "format_msg").Inc()
-	} else {
-		msg = output.String()
-	}
-	return msg
-}
-
-func (server *HTTPServer) GetMsgsFromAlertMessage(ircChannel string,
-	data *promtmpl.Data) []AlertMsg {
-	msgs := []AlertMsg{}
-	if server.MsgOnce {
-		msg := server.FormatMsg(ircChannel, data)
-		msgs = append(msgs,
-			AlertMsg{Channel: ircChannel, Alert: msg})
-	} else {
-		for _, alert := range data.Alerts {
-			msg := server.FormatMsg(ircChannel, alert)
-			msgs = append(msgs,
-				AlertMsg{Channel: ircChannel, Alert: msg})
-		}
-	}
-	return msgs
 }
 
 func (server *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
@@ -143,7 +106,7 @@ func (server *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handledAlertGroups.WithLabelValues(ircChannel).Inc()
-	for _, alertMsg := range server.GetMsgsFromAlertMessage(
+	for _, alertMsg := range server.formatter.GetMsgsFromAlertMessage(
 		ircChannel, &alertMessage) {
 		select {
 		case server.AlertMsgs <- alertMsg:
