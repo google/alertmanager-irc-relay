@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
+	"strings"
 	"text/template"
 
 	promtmpl "github.com/prometheus/alertmanager/template"
@@ -29,7 +30,13 @@ type Formatter struct {
 }
 
 func NewFormatter(config *Config) (*Formatter, error) {
-	tmpl, err := template.New("msg").Parse(config.MsgTemplate)
+	funcMap := template.FuncMap{
+		"ToUpper": strings.ToUpper,
+		"ToLower": strings.ToLower,
+		"Join":    strings.Join,
+	}
+
+	tmpl, err := template.New("msg").Funcs(funcMap).Parse(config.MsgTemplate)
 	if err != nil {
 		return nil, err
 	}
