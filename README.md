@@ -71,6 +71,20 @@ $ go install github.com/google/alertmanager-irc-relay
 $ alertmanager-irc-relay --config /path/to/your/config/file
 ```
 
+The configuration file can reference environment variables. It is then possible
+to specify certain parameters directly when running the bot:
+```
+$ cat /path/to/your/config/file
+...
+http_port: $MY_SERVICE_PORT
+...
+irc_nickname_password: $NICKSERV_PASSWORD
+...
+$ export MY_SERVICE_PORT=8000 NICKSERV_PASSWORD=mynickserv_key
+$ alertmanager-irc-relay --config /path/to/your/config/file
+```
+
+
 ### Prometheus configuration
 
 Prometheus can be configured following the official

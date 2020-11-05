@@ -80,6 +80,35 @@ func TestLoadGoodConfig(t *testing.T) {
 	}
 }
 
+func TestLoadWithEnvironmentVariables(t *testing.T) {
+	expectedNickPass := "mynickpass"
+
+	os.Setenv("NICKSERV_PASSWORD", expectedNickPass)
+	defer os.Clearenv()
+
+	tmpfile, err := ioutil.TempFile("", "airtestenvvarconfig")
+	if err != nil {
+		t.Errorf("Could not create tmpfile for testing: %s", err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	msgOnceConfigData := []byte("irc_nickname_password: $NICKSERV_PASSWORD")
+	if _, err := tmpfile.Write(msgOnceConfigData); err != nil {
+		t.Errorf("Could not write test data in tmpfile: %s", err)
+	}
+	tmpfile.Close()
+
+	config, err := LoadConfig(tmpfile.Name())
+	if config == nil {
+		t.Errorf("Expected a config, got: %s", err)
+	}
+
+	if config.IRCNickPass != expectedNickPass {
+		t.Errorf("Loaded unexpected value: %s (expected: %s)",
+			config.IRCNickPass, expectedNickPass)
+	}
+}
+
 func TestLoadBadFile(t *testing.T) {
 	tmpfile, err := ioutil.TempFile("", "airtestbadfile")
 	if err != nil {

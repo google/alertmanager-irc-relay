@@ -17,6 +17,7 @@ package main
 import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
+	"os"
 )
 
 const (
@@ -68,6 +69,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		if err != nil {
 			return nil, err
 		}
+		data = []byte(os.ExpandEnv(string(data)))
 		if err := yaml.Unmarshal(data, config); err != nil {
 			return nil, err
 		}
