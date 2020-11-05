@@ -95,6 +95,7 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, erro
 	ircConfig.Me.Name = config.IRCRealName
 	ircConfig.Server = strings.Join(
 		[]string{config.IRCHost, strconv.Itoa(config.IRCPort)}, ":")
+	ircConfig.Pass = config.IRCHostPass
 	ircConfig.SSL = config.IRCUseSSL
 	ircConfig.SSLConfig = &tls.Config{
 		ServerName:         config.IRCHost,

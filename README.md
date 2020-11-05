@@ -25,6 +25,8 @@ http_port: 8000
 # Note: SSL is enabled by default, use "irc_use_ssl: no" to disable.
 irc_host: irc.example.com
 irc_port: 7000
+# Optionally set the server password
+irc_host_password: myserver_password
 
 # Use this IRC nickname.
 irc_nickname: myalertbot

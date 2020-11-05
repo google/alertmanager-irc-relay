@@ -40,6 +40,7 @@ func TestLoadGoodConfig(t *testing.T) {
 		IRCNick:     "foo",
 		IRCHost:     "irc.example.com",
 		IRCPort:     1234,
+		IRCHostPass: "hostsecret",
 		IRCUseSSL:   true,
 		IRCChannels: []IRCChannel{IRCChannel{Name: "#foobar"}},
 		MsgTemplate: defaultMsgTemplate,
