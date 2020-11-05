@@ -82,3 +82,33 @@ func TestAlertsDispatchedOnce(t *testing.T) {
 
 	}
 }
+
+func TestStringsFunctions(t *testing.T) {
+	testingConfig := Config{
+		MsgTemplate: "Alert {{ .GroupLabels.alertname | ToUpper }} is {{ .Status }}",
+		MsgOnce:     true,
+	}
+	formatter, _ := NewFormatter(&testingConfig)
+
+	expectedAlertMsgs := []AlertMsg{
+		AlertMsg{
+			Channel: "#somechannel",
+			Alert:   "Alert AIRDOWN is resolved",
+		},
+	}
+
+	var alertMessage = promtmpl.Data{}
+	if err := json.Unmarshal([]byte(testdataSimpleAlertJson), &alertMessage); err != nil {
+		t.Fatal(fmt.Sprintf("Could not unmarshal %s", testdataSimpleAlertJson))
+	}
+
+	alertMsgs := formatter.GetMsgsFromAlertMessage("#somechannel", &alertMessage)
+
+	if !reflect.DeepEqual(expectedAlertMsgs, alertMsgs) {
+		t.Error(fmt.Sprintf(
+			"Unexpected alert msg.\nExpected: %s\nActual: %s",
+			expectedAlertMsgs, alertMsgs))
+
+	}
+
+}
