@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
+	"net/url"
 	"strings"
 	"text/template"
 
@@ -34,6 +35,9 @@ func NewFormatter(config *Config) (*Formatter, error) {
 		"ToUpper": strings.ToUpper,
 		"ToLower": strings.ToLower,
 		"Join":    strings.Join,
+
+		"QueryEscape": url.QueryEscape,
+		"PathEscape":  url.PathEscape,
 	}
 
 	tmpl, err := template.New("msg").Funcs(funcMap).Parse(config.MsgTemplate)

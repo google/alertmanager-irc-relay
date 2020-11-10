@@ -90,3 +90,22 @@ func TestStringsFunctions(t *testing.T) {
 
 	CreateFormatterAndCheckOutput(t, &testingConfig, expectedAlertMsgs)
 }
+
+func TestUrlFunctions(t *testing.T) {
+	testingConfig := Config{
+		MsgTemplate: "{{ .Annotations.SUMMARY | PathEscape }}",
+	}
+
+	expectedAlertMsgs := []AlertMsg{
+		AlertMsg{
+			Channel: "#somechannel",
+			Alert:   "service%20%2Fprometheus%20air%20down%20on%20instance1",
+		},
+		AlertMsg{
+			Channel: "#somechannel",
+			Alert:   "service%20%2Fprometheus%20air%20down%20on%20instance2",
+		},
+	}
+
+	CreateFormatterAndCheckOutput(t, &testingConfig, expectedAlertMsgs)
+}
