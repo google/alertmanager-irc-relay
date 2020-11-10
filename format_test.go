@@ -23,9 +23,27 @@ import (
 	promtmpl "github.com/prometheus/alertmanager/template"
 )
 
+func CreateFormatterAndCheckOutput(t *testing.T, c *Config, expected []AlertMsg) {
+	f, _ := NewFormatter(c)
+
+	var alertMessage = promtmpl.Data{}
+	if err := json.Unmarshal([]byte(testdataSimpleAlertJson), &alertMessage); err != nil {
+		t.Fatal(fmt.Sprintf("Could not unmarshal %s", testdataSimpleAlertJson))
+	}
+
+	alertMsgs := f.GetMsgsFromAlertMessage("#somechannel", &alertMessage)
+
+	if !reflect.DeepEqual(expected, alertMsgs) {
+		t.Error(fmt.Sprintf(
+			"Unexpected alert msg.\nExpected: %s\nActual: %s",
+			expected, alertMsgs))
+
+	}
+
+}
+
 func TestTemplateErrorsCreateRawAlertMsg(t *testing.T) {
 	testingConfig := Config{MsgTemplate: "Bogus template {{ nil }}"}
-	formatter, _ := NewFormatter(&testingConfig)
 
 	expectedAlertMsgs := []AlertMsg{
 		AlertMsg{
@@ -38,20 +56,7 @@ func TestTemplateErrorsCreateRawAlertMsg(t *testing.T) {
 		},
 	}
 
-	var alertMessage = promtmpl.Data{}
-	if err := json.Unmarshal([]byte(testdataSimpleAlertJson), &alertMessage); err != nil {
-		t.Fatal(fmt.Sprintf("Could not unmarshal %s", testdataSimpleAlertJson))
-	}
-
-	alertMsgs := formatter.GetMsgsFromAlertMessage("#somechannel", &alertMessage)
-
-	if !reflect.DeepEqual(expectedAlertMsgs, alertMsgs) {
-		t.Error(fmt.Sprintf(
-			"Unexpected alert msg.\nExpected: %s\nActual: %s",
-			expectedAlertMsgs, alertMsgs))
-
-	}
-
+	CreateFormatterAndCheckOutput(t, &testingConfig, expectedAlertMsgs)
 }
 
 func TestAlertsDispatchedOnce(t *testing.T) {
@@ -59,7 +64,6 @@ func TestAlertsDispatchedOnce(t *testing.T) {
 		MsgTemplate: "Alert {{ .GroupLabels.alertname }} is {{ .Status }}",
 		MsgOnce:     true,
 	}
-	formatter, _ := NewFormatter(&testingConfig)
 
 	expectedAlertMsgs := []AlertMsg{
 		AlertMsg{
@@ -68,19 +72,7 @@ func TestAlertsDispatchedOnce(t *testing.T) {
 		},
 	}
 
-	var alertMessage = promtmpl.Data{}
-	if err := json.Unmarshal([]byte(testdataSimpleAlertJson), &alertMessage); err != nil {
-		t.Fatal(fmt.Sprintf("Could not unmarshal %s", testdataSimpleAlertJson))
-	}
-
-	alertMsgs := formatter.GetMsgsFromAlertMessage("#somechannel", &alertMessage)
-
-	if !reflect.DeepEqual(expectedAlertMsgs, alertMsgs) {
-		t.Error(fmt.Sprintf(
-			"Unexpected alert msg.\nExpected: %s\nActual: %s",
-			expectedAlertMsgs, alertMsgs))
-
-	}
+	CreateFormatterAndCheckOutput(t, &testingConfig, expectedAlertMsgs)
 }
 
 func TestStringsFunctions(t *testing.T) {
@@ -88,7 +80,6 @@ func TestStringsFunctions(t *testing.T) {
 		MsgTemplate: "Alert {{ .GroupLabels.alertname | ToUpper }} is {{ .Status }}",
 		MsgOnce:     true,
 	}
-	formatter, _ := NewFormatter(&testingConfig)
 
 	expectedAlertMsgs := []AlertMsg{
 		AlertMsg{
@@ -97,18 +88,5 @@ func TestStringsFunctions(t *testing.T) {
 		},
 	}
 
-	var alertMessage = promtmpl.Data{}
-	if err := json.Unmarshal([]byte(testdataSimpleAlertJson), &alertMessage); err != nil {
-		t.Fatal(fmt.Sprintf("Could not unmarshal %s", testdataSimpleAlertJson))
-	}
-
-	alertMsgs := formatter.GetMsgsFromAlertMessage("#somechannel", &alertMessage)
-
-	if !reflect.DeepEqual(expectedAlertMsgs, alertMsgs) {
-		t.Error(fmt.Sprintf(
-			"Unexpected alert msg.\nExpected: %s\nActual: %s",
-			expectedAlertMsgs, alertMsgs))
-
-	}
-
+	CreateFormatterAndCheckOutput(t, &testingConfig, expectedAlertMsgs)
 }
