@@ -63,6 +63,9 @@ msg_template: "Alert {{ .Labels.alertname }} on {{ .Labels.instance }} is {{ .St
 # Note: When sending only one message per alert group the default
 # msg_template is set to
 # "Alert {{ .GroupLabels.alertname }} for {{ .GroupLabels.job }} is {{ .Status }}"
+
+# Set the internal buffer size for alerts received but not yet sent to IRC.
+alert_buffer_size: 2048
 ```
 
 Running the bot (assuming *$GOPATH* and *$PATH* are properly setup for go):

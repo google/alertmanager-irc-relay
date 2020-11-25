@@ -37,7 +37,7 @@ func main() {
 		return
 	}
 
-	alertMsgs := make(chan AlertMsg, 10)
+	alertMsgs := make(chan AlertMsg, config.AlertBufferSize)
 
 	ircNotifier, err := NewIRCNotifier(config, alertMsgs)
 	if err != nil {
