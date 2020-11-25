@@ -35,17 +35,18 @@ func TestNoConfig(t *testing.T) {
 
 func TestLoadGoodConfig(t *testing.T) {
 	expectedConfig := &Config{
-		HTTPHost:    "test.web",
-		HTTPPort:    8888,
-		IRCNick:     "foo",
-		IRCHost:     "irc.example.com",
-		IRCPort:     1234,
-		IRCHostPass: "hostsecret",
-		IRCUseSSL:   true,
-		IRCChannels: []IRCChannel{IRCChannel{Name: "#foobar"}},
-		MsgTemplate: defaultMsgTemplate,
-		MsgOnce:     false,
-		UsePrivmsg:  false,
+		HTTPHost:        "test.web",
+		HTTPPort:        8888,
+		IRCNick:         "foo",
+		IRCHost:         "irc.example.com",
+		IRCPort:         1234,
+		IRCHostPass:     "hostsecret",
+		IRCUseSSL:       true,
+		IRCChannels:     []IRCChannel{IRCChannel{Name: "#foobar"}},
+		MsgTemplate:     defaultMsgTemplate,
+		MsgOnce:         false,
+		UsePrivmsg:      false,
+		AlertBufferSize: 666,
 	}
 	expectedData, err := yaml.Marshal(expectedConfig)
 	if err != nil {
