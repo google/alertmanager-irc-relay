@@ -77,7 +77,6 @@ func RunHTTPTest(t *testing.T,
 	listener.router.ServeHTTP(responseRecorder, request)
 
 	listener.StopServing <- true
-	<-httpServer.StoppedRunning
 	return responseRecorder.Result()
 }
 

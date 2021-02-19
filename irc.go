@@ -15,10 +15,12 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	irc "github.com/fluffle/goirc/client"
@@ -63,12 +65,13 @@ type ChannelState struct {
 type IRCNotifier struct {
 	// Nick stores the nickname specified in the config, because irc.Client
 	// might change its copy.
-	Nick           string
-	NickPassword   string
-	Client         *irc.Conn
-	StopRunning    chan bool
-	StoppedRunning chan bool
-	AlertMsgs      chan AlertMsg
+	Nick         string
+	NickPassword string
+	Client       *irc.Conn
+	AlertMsgs    chan AlertMsg
+
+	ctx    context.Context
+	stopWg *sync.WaitGroup
 
 	// irc.Conn has a Connected() method that can tell us wether the TCP
 	// connection is up, and thus if we should trigger connect/disconnect.
@@ -88,7 +91,7 @@ type IRCNotifier struct {
 	BackoffCounter    Delayer
 }
 
-func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, error) {
+func NewIRCNotifier(ctx context.Context, stopWg *sync.WaitGroup, config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, error) {
 
 	ircConfig := irc.NewConfig(config.IRCNick)
 	ircConfig.Me.Ident = config.IRCNick
@@ -113,9 +116,9 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, erro
 		Nick:              config.IRCNick,
 		NickPassword:      config.IRCNickPass,
 		Client:            irc.Client(ircConfig),
-		StopRunning:       make(chan bool),
-		StoppedRunning:    make(chan bool),
 		AlertMsgs:         alertMsgs,
+		ctx:               ctx,
+		stopWg:            stopWg,
 		sessionUpSignal:   make(chan bool),
 		sessionDownSignal: make(chan bool),
 		PreJoinChannels:   config.IRCChannels,
@@ -234,19 +237,14 @@ func (notifier *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
 }
 
 func (notifier *IRCNotifier) Run() {
-	keepGoing := true
-	for keepGoing {
+	defer notifier.stopWg.Done()
+
+	for notifier.ctx.Err() != context.Canceled {
 		if !notifier.Client.Connected() {
 			log.Printf("Connecting to IRC %s", notifier.Client.Config().Server)
 			notifier.BackoffCounter.Delay()
 			if err := notifier.Client.Connect(); err != nil {
 				log.Printf("Could not connect to IRC: %s", err)
-				select {
-				case <-notifier.StopRunning:
-					log.Printf("IRC routine not connected but asked to terminate")
-					keepGoing = false
-				default:
-				}
 				continue
 			}
 			log.Printf("Connected to IRC server, waiting to establish session")
@@ -265,9 +263,8 @@ func (notifier *IRCNotifier) Run() {
 			notifier.CleanupChannels()
 			notifier.Client.Quit("see ya")
 			ircConnectedGauge.Set(0)
-		case <-notifier.StopRunning:
+		case <-notifier.ctx.Done():
 			log.Printf("IRC routine asked to terminate")
-			keepGoing = false
 		}
 	}
 	if notifier.Client.Connected() {
@@ -283,5 +280,4 @@ func (notifier *IRCNotifier) Run() {
 			}
 		}
 	}
-	notifier.StoppedRunning <- true
 }

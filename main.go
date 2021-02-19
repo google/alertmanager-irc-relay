@@ -15,12 +15,31 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 )
+
+func WithSignal(ctx context.Context, s ...os.Signal) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(ctx)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, s...)
+	go func() {
+		select {
+		case <-c:
+			log.Printf("Received %s, exiting", s)
+			cancel()
+		case <-ctx.Done():
+			cancel()
+		}
+		signal.Stop(c)
+	}()
+	return ctx, cancel
+}
 
 func main() {
 
@@ -28,8 +47,8 @@ func main() {
 
 	flag.Parse()
 
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	ctx, _ := WithSignal(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	stopWg := sync.WaitGroup{}
 
 	config, err := LoadConfig(*configFile)
 	if err != nil {
@@ -39,7 +58,8 @@ func main() {
 
 	alertMsgs := make(chan AlertMsg, config.AlertBufferSize)
 
-	ircNotifier, err := NewIRCNotifier(config, alertMsgs)
+	stopWg.Add(1)
+	ircNotifier, err := NewIRCNotifier(ctx, &stopWg, config, alertMsgs)
 	if err != nil {
 		log.Printf("Could not create IRC notifier: %s", err)
 		return
@@ -53,15 +73,5 @@ func main() {
 	}
 	go httpServer.Run()
 
-	select {
-	case <-httpServer.StoppedRunning:
-		log.Printf("Http server terminated, exiting")
-	case <-ircNotifier.StoppedRunning:
-		log.Printf("IRC notifier stopped running, exiting")
-	case s := <-signals:
-		log.Printf("Received %s, exiting", s)
-		ircNotifier.StopRunning <- true
-		log.Printf("Waiting for IRC to quit")
-		<-ircNotifier.StoppedRunning
-	}
+	stopWg.Wait()
 }

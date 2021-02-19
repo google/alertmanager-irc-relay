@@ -51,12 +51,11 @@ var (
 type HTTPListener func(string, http.Handler) error
 
 type HTTPServer struct {
-	StoppedRunning chan bool
-	Addr           string
-	Port           int
-	formatter      *Formatter
-	AlertMsgs      chan AlertMsg
-	httpListener   HTTPListener
+	Addr         string
+	Port         int
+	formatter    *Formatter
+	AlertMsgs    chan AlertMsg
+	httpListener HTTPListener
 }
 
 func NewHTTPServer(config *Config, alertMsgs chan AlertMsg) (
@@ -71,12 +70,11 @@ func NewHTTPServerForTesting(config *Config, alertMsgs chan AlertMsg,
 		return nil, err
 	}
 	server := &HTTPServer{
-		StoppedRunning: make(chan bool),
-		Addr:           config.HTTPHost,
-		Port:           config.HTTPPort,
-		formatter:      formatter,
-		AlertMsgs:      alertMsgs,
-		httpListener:   httpListener,
+		Addr:         config.HTTPHost,
+		Port:         config.HTTPPort,
+		formatter:    formatter,
+		AlertMsgs:    alertMsgs,
+		httpListener: httpListener,
 	}
 
 	return server, nil
@@ -135,5 +133,4 @@ func (server *HTTPServer) Run() {
 	if err := server.httpListener(listenAddr, router); err != nil {
 		log.Printf("Could not start http server: %s", err)
 	}
-	server.StoppedRunning <- true
 }
