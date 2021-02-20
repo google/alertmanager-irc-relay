@@ -37,7 +37,7 @@ const (
 var (
 	ircConnectedGauge = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "irc_connected",
-		Help: "Wether the IRC connection is established",
+		Help: "Whether the IRC connection is established",
 	})
 	ircSentMsgs = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "irc_sent_msgs",
