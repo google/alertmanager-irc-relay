@@ -513,7 +513,12 @@ func TestSendAlertDisconnected(t *testing.T) {
 
 	go notifier.Run()
 
-	alertMsgs <- AlertMsg{Channel: testChannel, Alert: disconnectedTestMessage}
+	// Alert channels is not consumed while disconnected
+	select {
+	case alertMsgs <- AlertMsg{Channel: testChannel, Alert: disconnectedTestMessage}:
+		t.Error("Alert consumed while disconnected")
+	default:
+	}
 
 	testStep.Done()
 	holdUserStep.Wait()

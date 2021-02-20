@@ -238,39 +238,7 @@ func (notifier *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
 	ircSentMsgs.WithLabelValues(alertMsg.Channel).Inc()
 }
 
-func (notifier *IRCNotifier) Run() {
-	defer notifier.stopWg.Done()
-
-	for notifier.ctx.Err() != context.Canceled {
-		if !notifier.Client.Connected() {
-			log.Printf("Connecting to IRC %s", notifier.Client.Config().Server)
-			if ok := notifier.BackoffCounter.DelayContext(notifier.ctx); !ok {
-				continue
-			}
-			if err := notifier.Client.Connect(); err != nil {
-				log.Printf("Could not connect to IRC: %s", err)
-				continue
-			}
-			log.Printf("Connected to IRC server, waiting to establish session")
-		}
-
-		select {
-		case alertMsg := <-notifier.AlertMsgs:
-			notifier.MaybeSendAlertMsg(&alertMsg)
-		case <-notifier.sessionUpSignal:
-			notifier.sessionUp = true
-			notifier.MaybeIdentifyNick()
-			notifier.JoinChannels()
-			ircConnectedGauge.Set(1)
-		case <-notifier.sessionDownSignal:
-			notifier.sessionUp = false
-			notifier.CleanupChannels()
-			notifier.Client.Quit("see ya")
-			ircConnectedGauge.Set(0)
-		case <-notifier.ctx.Done():
-			log.Printf("IRC routine asked to terminate")
-		}
-	}
+func (notifier *IRCNotifier) ShutdownPhase() {
 	if notifier.Client.Connected() {
 		log.Printf("IRC client connected, quitting")
 		notifier.Client.Quit("see ya")
@@ -284,4 +252,54 @@ func (notifier *IRCNotifier) Run() {
 			}
 		}
 	}
+}
+
+func (notifier *IRCNotifier) ConnectedPhase() {
+	select {
+	case alertMsg := <-notifier.AlertMsgs:
+		notifier.MaybeSendAlertMsg(&alertMsg)
+	case <-notifier.sessionDownSignal:
+		notifier.sessionUp = false
+		notifier.CleanupChannels()
+		notifier.Client.Quit("see ya")
+		ircConnectedGauge.Set(0)
+	case <-notifier.ctx.Done():
+		log.Printf("IRC routine asked to terminate")
+	}
+}
+
+func (notifier *IRCNotifier) SetupPhase() {
+	if !notifier.Client.Connected() {
+		log.Printf("Connecting to IRC %s", notifier.Client.Config().Server)
+		if ok := notifier.BackoffCounter.DelayContext(notifier.ctx); !ok {
+			return
+		}
+		if err := notifier.Client.Connect(); err != nil {
+			log.Printf("Could not connect to IRC: %s", err)
+			return
+		}
+		log.Printf("Connected to IRC server, waiting to establish session")
+	}
+	select {
+	case <-notifier.sessionUpSignal:
+		notifier.sessionUp = true
+		notifier.MaybeIdentifyNick()
+		notifier.JoinChannels()
+		ircConnectedGauge.Set(1)
+	case <-notifier.ctx.Done():
+		log.Printf("IRC routine asked to terminate")
+	}
+}
+
+func (notifier *IRCNotifier) Run() {
+	defer notifier.stopWg.Done()
+
+	for notifier.ctx.Err() != context.Canceled {
+		if !notifier.sessionUp {
+			notifier.SetupPhase()
+		} else {
+			notifier.ConnectedPhase()
+		}
+	}
+	notifier.ShutdownPhase()
 }
