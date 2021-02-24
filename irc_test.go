@@ -196,14 +196,21 @@ func makeTestServer(t *testing.T) (*testServer, int) {
 }
 
 type FakeDelayer struct {
+	DelayOnChan bool
+	StopDelay   chan bool
 }
 
 func (f *FakeDelayer) Delay() {
-	log.Printf("Faking Backoff")
+	f.DelayContext(context.Background())
 }
 
 func (f *FakeDelayer) DelayContext(ctx context.Context) bool {
 	log.Printf("Faking Backoff")
+	if f.DelayOnChan {
+		log.Printf("Waiting StopDelay signal")
+		<-f.StopDelay
+		log.Printf("Received StopDelay signal")
+	}
 	return true
 }
 
@@ -233,7 +240,10 @@ func makeTestNotifier(t *testing.T, config *Config) (*IRCNotifier, chan AlertMsg
 		t.Fatal(fmt.Sprintf("Could not create IRC notifier: %s", err))
 	}
 	notifier.Client.Config().Flood = true
-	notifier.BackoffCounter = &FakeDelayer{}
+	notifier.BackoffCounter = &FakeDelayer{
+		DelayOnChan: false,
+		StopDelay:   make(chan bool),
+	}
 
 	return notifier, alertMsgs, cancel, &stopWg
 }
@@ -628,6 +638,11 @@ func TestConnectErrorRetry(t *testing.T) {
 	// a connection error.
 	config.IRCUseSSL = true
 	notifier, _, cancel, _ := makeTestNotifier(t, config)
+	// Pilot reconnect attempts via backoff delay to prevent race
+	// conditions in the test while we change the components behavior on
+	// the fly.
+	delayer := notifier.BackoffCounter.(*FakeDelayer)
+	delayer.DelayOnChan = true
 
 	var testStep, joinStep sync.WaitGroup
 
@@ -639,6 +654,8 @@ func TestConnectErrorRetry(t *testing.T) {
 	server.SetCloseEarly(earlyHandler)
 
 	go notifier.Run()
+
+	delayer.StopDelay <- true
 
 	testStep.Wait()
 
@@ -654,6 +671,8 @@ func TestConnectErrorRetry(t *testing.T) {
 	}
 	server.SetHandler("JOIN", joinHandler)
 	server.SetCloseEarly(nil)
+
+	delayer.StopDelay <- true
 
 	joinStep.Wait()
 

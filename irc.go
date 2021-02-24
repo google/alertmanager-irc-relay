@@ -286,6 +286,8 @@ func (notifier *IRCNotifier) SetupPhase() {
 		notifier.MaybeIdentifyNick()
 		notifier.JoinChannels()
 		ircConnectedGauge.Set(1)
+	case <-notifier.sessionDownSignal:
+		log.Printf("Receiving a session down before the session is up, this is odd")
 	case <-notifier.ctx.Done():
 		log.Printf("IRC routine asked to terminate")
 	}
