@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -23,29 +24,39 @@ type FakeTime struct {
 	timeseries   []int
 	lastIndex    int
 	durationUnit time.Duration
+	afterChan    chan time.Time
 }
 
-func (f *FakeTime) GetTime() time.Time {
+func (f *FakeTime) Now() time.Time {
 	timeDelta := time.Duration(f.timeseries[f.lastIndex]) * f.durationUnit
 	fakeTime := time.Unix(0, 0).Add(timeDelta)
 	f.lastIndex++
 	return fakeTime
 }
 
+func (f *FakeTime) After(d time.Duration) <-chan time.Time {
+	return f.afterChan
+}
+
 func FakeJitter(input int) int {
 	return input
 }
 
-func RunBackoffTest(t *testing.T,
-	maxBackoff float64, resetDelta float64,
-	elapsedTime []int, expectedDelays []int) {
+func MakeTestingBackoff(maxBackoff float64, resetDelta float64, elapsedTime []int) (*Backoff, *FakeTime) {
 	fakeTime := &FakeTime{
 		timeseries:   elapsedTime,
 		lastIndex:    0,
 		durationUnit: time.Millisecond,
+		afterChan:    make(chan time.Time, 1),
 	}
 	backoff := NewBackoffForTesting(maxBackoff, resetDelta, time.Millisecond,
-		FakeJitter, fakeTime.GetTime)
+		FakeJitter, fakeTime)
+	return backoff, fakeTime
+}
+
+func RunBackoffTest(t *testing.T, maxBackoff float64, resetDelta float64, elapsedTime []int, expectedDelays []int) {
+
+	backoff, _ := MakeTestingBackoff(maxBackoff, resetDelta, elapsedTime)
 
 	for i, value := range expectedDelays {
 		expected_delay := time.Duration(value) * time.Millisecond
@@ -77,4 +88,20 @@ func TestBackoffReset(t *testing.T) {
 		// Delays get reset each time
 		[]int{0, 2, 4, 0, 2, 0, 2, 4},
 	)
+}
+
+func TestBackoffDelayContext(t *testing.T) {
+	backoff, fakeTime := MakeTestingBackoff(8, 32, []int{0, 0, 0})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	fakeTime.afterChan <- time.Now()
+	if ok := backoff.DelayContext(ctx); !ok {
+		t.Errorf("Expired time does not return true")
+	}
+
+	cancel()
+	if ok := backoff.DelayContext(ctx); ok {
+		t.Errorf("Canceled context does not return false")
+	}
 }

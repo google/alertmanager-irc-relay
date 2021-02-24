@@ -202,6 +202,11 @@ func (f *FakeDelayer) Delay() {
 	log.Printf("Faking Backoff")
 }
 
+func (f *FakeDelayer) DelayContext(ctx context.Context) bool {
+	log.Printf("Faking Backoff")
+	return true
+}
+
 func makeTestIRCConfig(IRCPort int) *Config {
 	return &Config{
 		IRCNick:     "foo",

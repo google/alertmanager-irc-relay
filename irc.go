@@ -164,7 +164,9 @@ func (notifier *IRCNotifier) HandleKick(nick string, channel string) {
 	}
 	log.Printf("Being kicked out of %s, re-joining", channel)
 	go func() {
-		state.BackoffCounter.Delay()
+		if ok := state.BackoffCounter.DelayContext(notifier.ctx); !ok {
+			return
+		}
 		notifier.Client.Join(state.Channel.Name, state.Channel.Password)
 	}()
 
@@ -242,7 +244,9 @@ func (notifier *IRCNotifier) Run() {
 	for notifier.ctx.Err() != context.Canceled {
 		if !notifier.Client.Connected() {
 			log.Printf("Connecting to IRC %s", notifier.Client.Config().Server)
-			notifier.BackoffCounter.Delay()
+			if ok := notifier.BackoffCounter.DelayContext(notifier.ctx); !ok {
+				continue
+			}
 			if err := notifier.Client.Connect(); err != nil {
 				log.Printf("Could not connect to IRC: %s", err)
 				continue

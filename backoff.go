@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"math"
 	"math/rand"
@@ -23,10 +24,9 @@ import (
 
 type JitterFunc func(int) int
 
-type TimeFunc func() time.Time
-
 type Delayer interface {
 	Delay()
+	DelayContext(context.Context) bool
 }
 
 type Backoff struct {
@@ -36,7 +36,7 @@ type Backoff struct {
 	lastAttempt  time.Time
 	durationUnit time.Duration
 	jitterer     JitterFunc
-	timeGetter   TimeFunc
+	timeTeller   TimeTeller
 }
 
 func jitterFunc(input int) int {
@@ -46,27 +46,44 @@ func jitterFunc(input int) int {
 	return rand.Intn(input)
 }
 
+// TimeTeller interface allows injection of fake time during testing
+type TimeTeller interface {
+	Now() time.Time
+	After(time.Duration) <-chan time.Time
+}
+
+type RealTime struct{}
+
+func (r *RealTime) Now() time.Time {
+	return time.Now()
+}
+
+func (r *RealTime) After(d time.Duration) <-chan time.Time {
+	return time.After(d)
+}
+
 func NewBackoff(maxBackoff float64, resetDelta float64,
 	durationUnit time.Duration) *Backoff {
+	timeTeller := &RealTime{}
 	return NewBackoffForTesting(
-		maxBackoff, resetDelta, durationUnit, jitterFunc, time.Now)
+		maxBackoff, resetDelta, durationUnit, jitterFunc, timeTeller)
 }
 
 func NewBackoffForTesting(maxBackoff float64, resetDelta float64,
-	durationUnit time.Duration, jitterer JitterFunc, timeGetter TimeFunc) *Backoff {
+	durationUnit time.Duration, jitterer JitterFunc, timeTeller TimeTeller) *Backoff {
 	return &Backoff{
 		step:         0,
 		maxBackoff:   maxBackoff,
 		resetDelta:   resetDelta,
-		lastAttempt:  timeGetter(),
+		lastAttempt:  timeTeller.Now(),
 		durationUnit: durationUnit,
 		jitterer:     jitterer,
-		timeGetter:   timeGetter,
+		timeTeller:   timeTeller,
 	}
 }
 
 func (b *Backoff) maybeReset() {
-	now := b.timeGetter()
+	now := b.timeTeller.Now()
 	lastAttemptDelta := float64(now.Sub(b.lastAttempt) / b.durationUnit)
 	b.lastAttempt = now
 
@@ -96,7 +113,18 @@ func (b *Backoff) GetDelay() time.Duration {
 }
 
 func (b *Backoff) Delay() {
+	b.DelayContext(context.Background())
+}
+
+func (b *Backoff) DelayContext(ctx context.Context) bool {
 	delay := b.GetDelay()
-	log.Printf("Backoff for %s", delay)
-	time.Sleep(delay)
+	log.Printf("Backoff for %s starts", delay)
+	select {
+	case <-b.timeTeller.After(delay):
+		log.Printf("Backoff for %s ends", delay)
+	case <-ctx.Done():
+		log.Printf("Backoff for %s canceled by context", delay)
+		return false
+	}
+	return true
 }
