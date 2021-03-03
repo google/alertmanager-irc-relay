@@ -1,5 +1,7 @@
 module github.com/google/alertmanager-irc-relay
 
+go 1.13
+
 require (
 	github.com/fluffle/goirc v1.0.4-0.20210224190621-e0c319f8fff5
 	github.com/gorilla/mux v1.8.0
