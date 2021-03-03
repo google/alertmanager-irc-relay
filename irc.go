@@ -274,7 +274,7 @@ func (notifier *IRCNotifier) SetupPhase() {
 		if ok := notifier.BackoffCounter.DelayContext(notifier.ctx); !ok {
 			return
 		}
-		if err := notifier.Client.Connect(); err != nil {
+		if err := notifier.Client.ConnectContext(notifier.ctx); err != nil {
 			log.Printf("Could not connect to IRC: %s", err)
 			return
 		}
