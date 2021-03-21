@@ -152,156 +152,156 @@ func NewIRCNotifier(ctx context.Context, stopWg *sync.WaitGroup, config *Config,
 	return notifier, nil
 }
 
-func (notifier *IRCNotifier) HandleKick(nick string, channel string) {
-	if nick != notifier.Client.Me().Nick {
+func (n *IRCNotifier) HandleKick(nick string, channel string) {
+	if nick != n.Client.Me().Nick {
 		// received kick info for somebody else
 		return
 	}
-	state, ok := notifier.JoinedChannels[channel]
+	state, ok := n.JoinedChannels[channel]
 	if !ok {
 		log.Printf("Being kicked out of non-joined channel (%s), ignoring", channel)
 		return
 	}
 	log.Printf("Being kicked out of %s, re-joining", channel)
 	go func() {
-		if ok := state.BackoffCounter.DelayContext(notifier.ctx); !ok {
+		if ok := state.BackoffCounter.DelayContext(n.ctx); !ok {
 			return
 		}
-		notifier.Client.Join(state.Channel.Name, state.Channel.Password)
+		n.Client.Join(state.Channel.Name, state.Channel.Password)
 	}()
 
 }
 
-func (notifier *IRCNotifier) CleanupChannels() {
+func (n *IRCNotifier) CleanupChannels() {
 	log.Printf("Deregistering all channels.")
-	notifier.JoinedChannels = make(map[string]ChannelState)
+	n.JoinedChannels = make(map[string]ChannelState)
 }
 
-func (notifier *IRCNotifier) JoinChannel(channel *IRCChannel) {
-	if _, joined := notifier.JoinedChannels[channel.Name]; joined {
+func (n *IRCNotifier) JoinChannel(channel *IRCChannel) {
+	if _, joined := n.JoinedChannels[channel.Name]; joined {
 		return
 	}
 	log.Printf("Joining %s", channel.Name)
-	notifier.Client.Join(channel.Name, channel.Password)
+	n.Client.Join(channel.Name, channel.Password)
 	state := ChannelState{
 		Channel: *channel,
 		BackoffCounter: NewBackoff(
 			ircConnectMaxBackoffSecs, ircConnectBackoffResetSecs,
 			time.Second),
 	}
-	notifier.JoinedChannels[channel.Name] = state
+	n.JoinedChannels[channel.Name] = state
 }
 
-func (notifier *IRCNotifier) JoinChannels() {
-	for _, channel := range notifier.PreJoinChannels {
-		notifier.JoinChannel(&channel)
+func (n *IRCNotifier) JoinChannels() {
+	for _, channel := range n.PreJoinChannels {
+		n.JoinChannel(&channel)
 	}
 }
 
-func (notifier *IRCNotifier) MaybeIdentifyNick() {
-	if notifier.NickPassword == "" {
+func (n *IRCNotifier) MaybeIdentifyNick() {
+	if n.NickPassword == "" {
 		return
 	}
 
 	// Very lazy/optimistic, but this is good enough for my irssi config,
 	// so it should work here as well.
-	currentNick := notifier.Client.Me().Nick
-	if currentNick != notifier.Nick {
+	currentNick := n.Client.Me().Nick
+	if currentNick != n.Nick {
 		log.Printf("My nick is '%s', sending GHOST to NickServ to get '%s'",
-			currentNick, notifier.Nick)
-		notifier.Client.Privmsgf("NickServ", "GHOST %s %s", notifier.Nick,
-			notifier.NickPassword)
-		time.Sleep(notifier.NickservDelayWait)
+			currentNick, n.Nick)
+		n.Client.Privmsgf("NickServ", "GHOST %s %s", n.Nick,
+			n.NickPassword)
+		time.Sleep(n.NickservDelayWait)
 
-		log.Printf("Changing nick to '%s'", notifier.Nick)
-		notifier.Client.Nick(notifier.Nick)
+		log.Printf("Changing nick to '%s'", n.Nick)
+		n.Client.Nick(n.Nick)
 	}
 	log.Printf("Sending IDENTIFY to NickServ")
-	notifier.Client.Privmsgf("NickServ", "IDENTIFY %s", notifier.NickPassword)
-	time.Sleep(notifier.NickservDelayWait)
+	n.Client.Privmsgf("NickServ", "IDENTIFY %s", n.NickPassword)
+	time.Sleep(n.NickservDelayWait)
 }
 
-func (notifier *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
-	if !notifier.sessionUp {
+func (n *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
+	if !n.sessionUp {
 		log.Printf("Cannot send alert to %s : IRC not connected",
 			alertMsg.Channel)
 		ircSendMsgErrors.WithLabelValues(alertMsg.Channel, "not_connected").Inc()
 		return
 	}
-	notifier.JoinChannel(&IRCChannel{Name: alertMsg.Channel})
+	n.JoinChannel(&IRCChannel{Name: alertMsg.Channel})
 
-	if notifier.UsePrivmsg {
-		notifier.Client.Privmsg(alertMsg.Channel, alertMsg.Alert)
+	if n.UsePrivmsg {
+		n.Client.Privmsg(alertMsg.Channel, alertMsg.Alert)
 	} else {
-		notifier.Client.Notice(alertMsg.Channel, alertMsg.Alert)
+		n.Client.Notice(alertMsg.Channel, alertMsg.Alert)
 	}
 	ircSentMsgs.WithLabelValues(alertMsg.Channel).Inc()
 }
 
-func (notifier *IRCNotifier) ShutdownPhase() {
-	if notifier.Client.Connected() {
+func (n *IRCNotifier) ShutdownPhase() {
+	if n.Client.Connected() {
 		log.Printf("IRC client connected, quitting")
-		notifier.Client.Quit("see ya")
+		n.Client.Quit("see ya")
 
-		if notifier.sessionUp {
+		if n.sessionUp {
 			log.Printf("Session is up, wait for IRC disconnect to complete")
 			select {
-			case <-notifier.sessionDownSignal:
-			case <-time.After(notifier.Client.Config().Timeout):
+			case <-n.sessionDownSignal:
+			case <-time.After(n.Client.Config().Timeout):
 				log.Printf("Timeout while waiting for IRC disconnect to complete, stopping anyway")
 			}
 		}
 	}
 }
 
-func (notifier *IRCNotifier) ConnectedPhase() {
+func (n *IRCNotifier) ConnectedPhase() {
 	select {
-	case alertMsg := <-notifier.AlertMsgs:
-		notifier.MaybeSendAlertMsg(&alertMsg)
-	case <-notifier.sessionDownSignal:
-		notifier.sessionUp = false
-		notifier.CleanupChannels()
-		notifier.Client.Quit("see ya")
+	case alertMsg := <-n.AlertMsgs:
+		n.MaybeSendAlertMsg(&alertMsg)
+	case <-n.sessionDownSignal:
+		n.sessionUp = false
+		n.CleanupChannels()
+		n.Client.Quit("see ya")
 		ircConnectedGauge.Set(0)
-	case <-notifier.ctx.Done():
+	case <-n.ctx.Done():
 		log.Printf("IRC routine asked to terminate")
 	}
 }
 
-func (notifier *IRCNotifier) SetupPhase() {
-	if !notifier.Client.Connected() {
-		log.Printf("Connecting to IRC %s", notifier.Client.Config().Server)
-		if ok := notifier.BackoffCounter.DelayContext(notifier.ctx); !ok {
+func (n *IRCNotifier) SetupPhase() {
+	if !n.Client.Connected() {
+		log.Printf("Connecting to IRC %s", n.Client.Config().Server)
+		if ok := n.BackoffCounter.DelayContext(n.ctx); !ok {
 			return
 		}
-		if err := notifier.Client.ConnectContext(notifier.ctx); err != nil {
+		if err := n.Client.ConnectContext(n.ctx); err != nil {
 			log.Printf("Could not connect to IRC: %s", err)
 			return
 		}
 		log.Printf("Connected to IRC server, waiting to establish session")
 	}
 	select {
-	case <-notifier.sessionUpSignal:
-		notifier.sessionUp = true
-		notifier.MaybeIdentifyNick()
-		notifier.JoinChannels()
+	case <-n.sessionUpSignal:
+		n.sessionUp = true
+		n.MaybeIdentifyNick()
+		n.JoinChannels()
 		ircConnectedGauge.Set(1)
-	case <-notifier.sessionDownSignal:
+	case <-n.sessionDownSignal:
 		log.Printf("Receiving a session down before the session is up, this is odd")
-	case <-notifier.ctx.Done():
+	case <-n.ctx.Done():
 		log.Printf("IRC routine asked to terminate")
 	}
 }
 
-func (notifier *IRCNotifier) Run() {
-	defer notifier.stopWg.Done()
+func (n *IRCNotifier) Run() {
+	defer n.stopWg.Done()
 
-	for notifier.ctx.Err() != context.Canceled {
-		if !notifier.sessionUp {
-			notifier.SetupPhase()
+	for n.ctx.Err() != context.Canceled {
+		if !n.sessionUp {
+			n.SetupPhase()
 		} else {
-			notifier.ConnectedPhase()
+			n.ConnectedPhase()
 		}
 	}
-	notifier.ShutdownPhase()
+	n.ShutdownPhase()
 }

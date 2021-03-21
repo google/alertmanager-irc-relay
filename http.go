@@ -80,7 +80,7 @@ func NewHTTPServerForTesting(config *Config, alertMsgs chan AlertMsg,
 	return server, nil
 }
 
-func (server *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
+func (s *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	ircChannel := "#" + vars["IRCChannel"]
 
@@ -104,10 +104,10 @@ func (server *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	handledAlertGroups.WithLabelValues(ircChannel).Inc()
-	for _, alertMsg := range server.formatter.GetMsgsFromAlertMessage(
+	for _, alertMsg := range s.formatter.GetMsgsFromAlertMessage(
 		ircChannel, &alertMessage) {
 		select {
-		case server.AlertMsgs <- alertMsg:
+		case s.AlertMsgs <- alertMsg:
 			handledAlerts.WithLabelValues(ircChannel).Inc()
 		default:
 			log.Printf("Could not send this alert to the IRC routine: %s",
@@ -117,20 +117,20 @@ func (server *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (server *HTTPServer) Run() {
+func (s *HTTPServer) Run() {
 	router := mux.NewRouter().StrictSlash(true)
 
 	router.Path("/metrics").Handler(promhttp.Handler())
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		server.RelayAlert(w, r)
+		s.RelayAlert(w, r)
 	})
 	router.Path("/{IRCChannel}").Handler(handler).Methods("POST")
 
 	listenAddr := strings.Join(
-		[]string{server.Addr, strconv.Itoa(server.Port)}, ":")
+		[]string{s.Addr, strconv.Itoa(s.Port)}, ":")
 	log.Printf("Starting HTTP server")
-	if err := server.httpListener(listenAddr, router); err != nil {
+	if err := s.httpListener(listenAddr, router); err != nil {
 		log.Printf("Could not start http server: %s", err)
 	}
 }
