@@ -70,8 +70,8 @@ type IRCNotifier struct {
 	Client       *irc.Conn
 	AlertMsgs    chan AlertMsg
 
-	ctx    context.Context
-	stopWg *sync.WaitGroup
+	stopCtx context.Context
+	stopWg  *sync.WaitGroup
 
 	// irc.Conn has a Connected() method that can tell us wether the TCP
 	// connection is up, and thus if we should trigger connect/disconnect.
@@ -91,7 +91,7 @@ type IRCNotifier struct {
 	BackoffCounter    Delayer
 }
 
-func NewIRCNotifier(ctx context.Context, stopWg *sync.WaitGroup, config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, error) {
+func NewIRCNotifier(stopCtx context.Context, stopWg *sync.WaitGroup, config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, error) {
 
 	ircConfig := irc.NewConfig(config.IRCNick)
 	ircConfig.Me.Ident = config.IRCNick
@@ -117,7 +117,7 @@ func NewIRCNotifier(ctx context.Context, stopWg *sync.WaitGroup, config *Config,
 		NickPassword:      config.IRCNickPass,
 		Client:            irc.Client(ircConfig),
 		AlertMsgs:         alertMsgs,
-		ctx:               ctx,
+		stopCtx:           stopCtx,
 		stopWg:            stopWg,
 		sessionUpSignal:   make(chan bool),
 		sessionDownSignal: make(chan bool),
@@ -164,7 +164,7 @@ func (n *IRCNotifier) HandleKick(nick string, channel string) {
 	}
 	log.Printf("Being kicked out of %s, re-joining", channel)
 	go func() {
-		if ok := state.BackoffCounter.DelayContext(n.ctx); !ok {
+		if ok := state.BackoffCounter.DelayContext(n.stopCtx); !ok {
 			return
 		}
 		n.Client.Join(state.Channel.Name, state.Channel.Password)
@@ -263,7 +263,7 @@ func (n *IRCNotifier) ConnectedPhase() {
 		n.CleanupChannels()
 		n.Client.Quit("see ya")
 		ircConnectedGauge.Set(0)
-	case <-n.ctx.Done():
+	case <-n.stopCtx.Done():
 		log.Printf("IRC routine asked to terminate")
 	}
 }
@@ -271,10 +271,10 @@ func (n *IRCNotifier) ConnectedPhase() {
 func (n *IRCNotifier) SetupPhase() {
 	if !n.Client.Connected() {
 		log.Printf("Connecting to IRC %s", n.Client.Config().Server)
-		if ok := n.BackoffCounter.DelayContext(n.ctx); !ok {
+		if ok := n.BackoffCounter.DelayContext(n.stopCtx); !ok {
 			return
 		}
-		if err := n.Client.ConnectContext(n.ctx); err != nil {
+		if err := n.Client.ConnectContext(n.stopCtx); err != nil {
 			log.Printf("Could not connect to IRC: %s", err)
 			return
 		}
@@ -288,7 +288,7 @@ func (n *IRCNotifier) SetupPhase() {
 		ircConnectedGauge.Set(1)
 	case <-n.sessionDownSignal:
 		log.Printf("Receiving a session down before the session is up, this is odd")
-	case <-n.ctx.Done():
+	case <-n.stopCtx.Done():
 		log.Printf("IRC routine asked to terminate")
 	}
 }
@@ -296,7 +296,7 @@ func (n *IRCNotifier) SetupPhase() {
 func (n *IRCNotifier) Run() {
 	defer n.stopWg.Done()
 
-	for n.ctx.Err() != context.Canceled {
+	for n.stopCtx.Err() != context.Canceled {
 		if !n.sessionUp {
 			n.SetupPhase()
 		} else {
