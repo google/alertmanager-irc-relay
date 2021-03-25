@@ -195,25 +195,6 @@ func makeTestServer(t *testing.T) (*testServer, int) {
 	return server, addr.Port
 }
 
-type FakeDelayer struct {
-	DelayOnChan bool
-	StopDelay   chan bool
-}
-
-func (f *FakeDelayer) Delay() {
-	f.DelayContext(context.Background())
-}
-
-func (f *FakeDelayer) DelayContext(ctx context.Context) bool {
-	log.Printf("Faking Backoff")
-	if f.DelayOnChan {
-		log.Printf("Waiting StopDelay signal")
-		<-f.StopDelay
-		log.Printf("Received StopDelay signal")
-	}
-	return true
-}
-
 func makeTestIRCConfig(IRCPort int) *Config {
 	return &Config{
 		IRCNick:     "foo",
