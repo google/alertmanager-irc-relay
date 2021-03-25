@@ -212,19 +212,16 @@ func makeTestIRCConfig(IRCPort int) *Config {
 }
 
 func makeTestNotifier(t *testing.T, config *Config) (*IRCNotifier, chan AlertMsg, context.CancelFunc, *sync.WaitGroup) {
+	fakeDelayerMaker := &FakeDelayerMaker{}
 	alertMsgs := make(chan AlertMsg)
 	ctx, cancel := context.WithCancel(context.Background())
 	stopWg := sync.WaitGroup{}
 	stopWg.Add(1)
-	notifier, err := NewIRCNotifier(ctx, &stopWg, config, alertMsgs)
+	notifier, err := NewIRCNotifier(ctx, &stopWg, config, alertMsgs, fakeDelayerMaker)
 	if err != nil {
 		t.Fatal(fmt.Sprintf("Could not create IRC notifier: %s", err))
 	}
 	notifier.Client.Config().Flood = true
-	notifier.BackoffCounter = &FakeDelayer{
-		DelayOnChan: false,
-		StopDelay:   make(chan bool),
-	}
 
 	return notifier, alertMsgs, cancel, &stopWg
 }

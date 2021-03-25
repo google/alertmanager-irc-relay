@@ -24,6 +24,10 @@ import (
 
 type JitterFunc func(int) int
 
+type DelayerMaker interface {
+	NewDelayer(float64, float64, time.Duration) Delayer
+}
+
 type Delayer interface {
 	Delay()
 	DelayContext(context.Context) bool
@@ -62,8 +66,9 @@ func (r *RealTime) After(d time.Duration) <-chan time.Time {
 	return time.After(d)
 }
 
-func NewBackoff(maxBackoff float64, resetDelta float64,
-	durationUnit time.Duration) *Backoff {
+type BackoffMaker struct{}
+
+func (bm *BackoffMaker) NewDelayer(maxBackoff float64, resetDelta float64, durationUnit time.Duration) Delayer {
 	timeTeller := &RealTime{}
 	return NewBackoffForTesting(
 		maxBackoff, resetDelta, durationUnit, jitterFunc, timeTeller)

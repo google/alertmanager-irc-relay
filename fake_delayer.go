@@ -17,7 +17,17 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 )
+
+type FakeDelayerMaker struct{}
+
+func (fdm *FakeDelayerMaker) NewDelayer(_ float64, _ float64, _ time.Duration) Delayer {
+	return &FakeDelayer{
+		DelayOnChan: false,
+		StopDelay:   make(chan bool),
+	}
+}
 
 type FakeDelayer struct {
 	DelayOnChan bool

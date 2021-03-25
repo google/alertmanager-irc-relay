@@ -91,7 +91,7 @@ type IRCNotifier struct {
 	BackoffCounter    Delayer
 }
 
-func NewIRCNotifier(stopCtx context.Context, stopWg *sync.WaitGroup, config *Config, alertMsgs chan AlertMsg) (*IRCNotifier, error) {
+func NewIRCNotifier(stopCtx context.Context, stopWg *sync.WaitGroup, config *Config, alertMsgs chan AlertMsg, delayerMaker DelayerMaker) (*IRCNotifier, error) {
 
 	ircConfig := irc.NewConfig(config.IRCNick)
 	ircConfig.Me.Ident = config.IRCNick
@@ -108,7 +108,7 @@ func NewIRCNotifier(stopCtx context.Context, stopWg *sync.WaitGroup, config *Con
 	ircConfig.Timeout = connectionTimeoutSecs * time.Second
 	ircConfig.NewNick = func(n string) string { return n + "^" }
 
-	backoffCounter := NewBackoff(
+	backoffCounter := delayerMaker.NewDelayer(
 		ircConnectMaxBackoffSecs, ircConnectBackoffResetSecs,
 		time.Second)
 
@@ -183,9 +183,10 @@ func (n *IRCNotifier) JoinChannel(channel *IRCChannel) {
 	}
 	log.Printf("Joining %s", channel.Name)
 	n.Client.Join(channel.Name, channel.Password)
+	bm := BackoffMaker{}
 	state := ChannelState{
 		Channel: *channel,
-		BackoffCounter: NewBackoff(
+		BackoffCounter: bm.NewDelayer(
 			ircConnectMaxBackoffSecs, ircConnectBackoffResetSecs,
 			time.Second),
 	}
