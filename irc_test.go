@@ -59,44 +59,6 @@ func makeTestNotifier(t *testing.T, config *Config) (*IRCNotifier, chan AlertMsg
 	return notifier, alertMsgs, cancel, &stopWg
 }
 
-func TestPreJoinChannels(t *testing.T) {
-	server, port := makeTestServer(t)
-	config := makeTestIRCConfig(port)
-	notifier, _, cancel, _ := makeTestNotifier(t, config)
-
-	var testStep sync.WaitGroup
-
-	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		// #baz is configured as the last channel to pre-join
-		if line.Args[0] == "#baz" {
-			testStep.Done()
-		}
-		return nil
-	}
-	server.SetHandler("JOIN", joinHandler)
-
-	testStep.Add(1)
-	go notifier.Run()
-
-	testStep.Wait()
-
-	cancel()
-	server.Stop()
-
-	expectedCommands := []string{
-		"NICK foo",
-		"USER foo 12 * :",
-		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
-		"QUIT :see ya",
-	}
-
-	if !reflect.DeepEqual(expectedCommands, server.Log) {
-		t.Error("Did not pre-join channels")
-	}
-}
-
 func TestServerPassword(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
