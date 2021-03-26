@@ -37,8 +37,6 @@ func makeTestIRCConfig(IRCPort int) *Config {
 		IRCUseSSL:   false,
 		IRCChannels: []IRCChannel{
 			IRCChannel{Name: "#foo"},
-			IRCChannel{Name: "#bar"},
-			IRCChannel{Name: "#baz"},
 		},
 		UsePrivmsg: false,
 	}
@@ -68,10 +66,7 @@ func TestServerPassword(t *testing.T) {
 	var testStep sync.WaitGroup
 
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		// #baz is configured as the last channel to pre-join
-		if line.Args[0] == "#baz" {
-			testStep.Done()
-		}
+		testStep.Done()
 		return nil
 	}
 	server.SetHandler("JOIN", joinHandler)
@@ -89,8 +84,6 @@ func TestServerPassword(t *testing.T) {
 		"NICK foo",
 		"USER foo 12 * :",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		"QUIT :see ya",
 	}
 
@@ -144,8 +137,6 @@ func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 		"NICK foo",
 		"USER foo 12 * :",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		"NOTICE #foo :test message",
 		"QUIT :see ya",
 	}
@@ -201,8 +192,6 @@ func TestUsePrivmsgToSendAlertOnPreJoinedChannel(t *testing.T) {
 		"NICK foo",
 		"USER foo 12 * :",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		"PRIVMSG #foo :test message",
 		"QUIT :see ya",
 	}
@@ -225,10 +214,7 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 	// Send the alert after configured channels have joined, to ensure log
 	// ordering.
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		// #baz is configured as the last channel to pre-join
-		if line.Args[0] == "#baz" {
-			testStep.Done()
-		}
+		testStep.Done()
 		return nil
 	}
 	server.SetHandler("JOIN", joinHandler)
@@ -258,8 +244,6 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 		"NICK foo",
 		"USER foo 12 * :",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		// #foobar joined before sending message
 		"JOIN #foobar",
 		"NOTICE #foobar :test message",
@@ -307,13 +291,10 @@ func TestSendAlertDisconnected(t *testing.T) {
 	holdUserStep.Wait()
 
 	// Make sure session is established by checking that pre-joined
-	// channels are there.
+	// channel is there.
 	testStep.Add(1)
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		// #baz is configured as the last channel to pre-join
-		if line.Args[0] == "#baz" {
-			testStep.Done()
-		}
+		testStep.Done()
 		return nil
 	}
 	server.SetHandler("JOIN", joinHandler)
@@ -339,8 +320,6 @@ func TestSendAlertDisconnected(t *testing.T) {
 		"NICK foo",
 		"USER foo 12 * :",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		// Only message sent while being connected is received.
 		"NOTICE #foo :connected test message",
 		"QUIT :see ya",
@@ -359,10 +338,7 @@ func TestReconnect(t *testing.T) {
 	var testStep sync.WaitGroup
 
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		// #baz is configured as the last channel to pre-join
-		if line.Args[0] == "#baz" {
-			testStep.Done()
-		}
+		testStep.Done()
 		return nil
 	}
 	server.SetHandler("JOIN", joinHandler)
@@ -370,14 +346,14 @@ func TestReconnect(t *testing.T) {
 	testStep.Add(1)
 	go notifier.Run()
 
-	// Wait until the last pre-joined channel is seen.
+	// Wait until the pre-joined channel is seen.
 	testStep.Wait()
 
 	// Simulate disconnection.
 	testStep.Add(1)
 	server.Client.Close()
 
-	// Wait again until the last pre-joined channel is seen.
+	// Wait again until the pre-joined channel is seen.
 	testStep.Wait()
 
 	cancel()
@@ -388,14 +364,10 @@ func TestReconnect(t *testing.T) {
 		"NICK foo",
 		"USER foo 12 * :",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		// Commands from reconnection
 		"NICK foo",
 		"USER foo 12 * :",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		"QUIT :see ya",
 	}
 
@@ -436,10 +408,7 @@ func TestConnectErrorRetry(t *testing.T) {
 	notifier.Client.Config().SSL = false
 	joinStep.Add(1)
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		// #baz is configured as the last channel to pre-join
-		if line.Args[0] == "#baz" {
-			joinStep.Done()
-		}
+		joinStep.Done()
 		return nil
 	}
 	server.SetHandler("JOIN", joinHandler)
@@ -456,8 +425,6 @@ func TestConnectErrorRetry(t *testing.T) {
 		"NICK foo",
 		"USER foo 12 * :",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		"QUIT :see ya",
 	}
 
@@ -475,13 +442,10 @@ func TestIdentify(t *testing.T) {
 
 	var testStep sync.WaitGroup
 
-	// Wait until the last pre-joined channel is seen (joining happens
+	// Wait until the pre-joined channel is seen (joining happens
 	// after identification).
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		// #baz is configured as the last channel to pre-join
-		if line.Args[0] == "#baz" {
-			testStep.Done()
-		}
+		testStep.Done()
 		return nil
 	}
 	server.SetHandler("JOIN", joinHandler)
@@ -499,8 +463,6 @@ func TestIdentify(t *testing.T) {
 		"USER foo 12 * :",
 		"PRIVMSG NickServ :IDENTIFY nickpassword",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		"QUIT :see ya",
 	}
 
@@ -532,13 +494,10 @@ func TestGhostAndIdentify(t *testing.T) {
 	}
 	server.SetHandler("NICK", nickHandler)
 
-	// Wait until the last pre-joined channel is seen (joining happens
+	// Wait until the pre-joined channel is seen (joining happens
 	// after identification).
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		// #baz is configured as the last channel to pre-join
-		if line.Args[0] == "#baz" {
-			testStep.Done()
-		}
+		testStep.Done()
 		return nil
 	}
 	server.SetHandler("JOIN", joinHandler)
@@ -563,8 +522,6 @@ func TestGhostAndIdentify(t *testing.T) {
 		"NICK foo",
 		"PRIVMSG NickServ :IDENTIFY nickpassword",
 		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
 		"QUIT :see ya",
 	}
 

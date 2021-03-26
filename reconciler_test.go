@@ -23,6 +23,16 @@ import (
 	irc "github.com/fluffle/goirc/client"
 )
 
+func makeReconcilerTestIRCConfig(IRCPort int) *Config {
+	config := makeTestIRCConfig(IRCPort)
+	config.IRCChannels = []IRCChannel{
+		IRCChannel{Name: "#foo"},
+		IRCChannel{Name: "#bar"},
+		IRCChannel{Name: "#baz"},
+	}
+	return config
+}
+
 func makeTestReconciler(config *Config) (*ChannelReconciler, chan bool, chan bool) {
 
 	sessionUp := make(chan bool)
@@ -48,7 +58,7 @@ func makeTestReconciler(config *Config) (*ChannelReconciler, chan bool, chan boo
 
 func TestPreJoinChannels(t *testing.T) {
 	server, port := makeTestServer(t)
-	config := makeTestIRCConfig(port)
+	config := makeReconcilerTestIRCConfig(port)
 	reconciler, sessionUp, sessionDown := makeTestReconciler(config)
 
 	var testStep sync.WaitGroup
