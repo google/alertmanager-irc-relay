@@ -57,6 +57,25 @@ func loggerHandler(_ *irc.Conn, line *irc.Line) {
 	log.Printf("Received: '%s'", line.Raw)
 }
 
+func makeGOIRCConfig(config *Config) *irc.Config {
+	ircConfig := irc.NewConfig(config.IRCNick)
+	ircConfig.Me.Ident = config.IRCNick
+	ircConfig.Me.Name = config.IRCRealName
+	ircConfig.Server = strings.Join(
+		[]string{config.IRCHost, strconv.Itoa(config.IRCPort)}, ":")
+	ircConfig.Pass = config.IRCHostPass
+	ircConfig.SSL = config.IRCUseSSL
+	ircConfig.SSLConfig = &tls.Config{
+		ServerName:         config.IRCHost,
+		InsecureSkipVerify: !config.IRCVerifySSL,
+	}
+	ircConfig.PingFreq = pingFrequencySecs * time.Second
+	ircConfig.Timeout = connectionTimeoutSecs * time.Second
+	ircConfig.NewNick = func(n string) string { return n + "^" }
+
+	return ircConfig
+}
+
 type IRCNotifier struct {
 	// Nick stores the nickname specified in the config, because irc.Client
 	// might change its copy.
@@ -87,20 +106,7 @@ type IRCNotifier struct {
 
 func NewIRCNotifier(stopCtx context.Context, stopWg *sync.WaitGroup, config *Config, alertMsgs chan AlertMsg, delayerMaker DelayerMaker) (*IRCNotifier, error) {
 
-	ircConfig := irc.NewConfig(config.IRCNick)
-	ircConfig.Me.Ident = config.IRCNick
-	ircConfig.Me.Name = config.IRCRealName
-	ircConfig.Server = strings.Join(
-		[]string{config.IRCHost, strconv.Itoa(config.IRCPort)}, ":")
-	ircConfig.Pass = config.IRCHostPass
-	ircConfig.SSL = config.IRCUseSSL
-	ircConfig.SSLConfig = &tls.Config{
-		ServerName:         config.IRCHost,
-		InsecureSkipVerify: !config.IRCVerifySSL,
-	}
-	ircConfig.PingFreq = pingFrequencySecs * time.Second
-	ircConfig.Timeout = connectionTimeoutSecs * time.Second
-	ircConfig.NewNick = func(n string) string { return n + "^" }
+	ircConfig := makeGOIRCConfig(config)
 
 	client := irc.Client(ircConfig)
 
