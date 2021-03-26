@@ -128,28 +128,32 @@ func NewIRCNotifier(stopCtx context.Context, stopWg *sync.WaitGroup, config *Con
 		BackoffCounter:    backoffCounter,
 	}
 
-	notifier.Client.HandleFunc(irc.CONNECTED,
+	notifier.registerHandlers()
+
+	return notifier, nil
+}
+
+func (n *IRCNotifier) registerHandlers() {
+	n.Client.HandleFunc(irc.CONNECTED,
 		func(*irc.Conn, *irc.Line) {
 			log.Printf("Session established")
-			notifier.sessionUpSignal <- true
+			n.sessionUpSignal <- true
 		})
 
-	notifier.Client.HandleFunc(irc.DISCONNECTED,
+	n.Client.HandleFunc(irc.DISCONNECTED,
 		func(*irc.Conn, *irc.Line) {
 			log.Printf("Disconnected from IRC")
-			notifier.sessionDownSignal <- false
+			n.sessionDownSignal <- false
 		})
 
-	notifier.Client.HandleFunc(irc.KICK,
+	n.Client.HandleFunc(irc.KICK,
 		func(_ *irc.Conn, line *irc.Line) {
-			notifier.HandleKick(line.Args[1], line.Args[0])
+			n.HandleKick(line.Args[1], line.Args[0])
 		})
 
 	for _, event := range []string{irc.NOTICE, "433"} {
-		notifier.Client.HandleFunc(event, loggerHandler)
+		n.Client.HandleFunc(event, loggerHandler)
 	}
-
-	return notifier, nil
 }
 
 func (n *IRCNotifier) HandleKick(nick string, channel string) {
