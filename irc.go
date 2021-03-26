@@ -177,14 +177,36 @@ func (n *IRCNotifier) MaybeIdentifyNick() {
 	time.Sleep(n.NickservDelayWait)
 }
 
-func (n *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
+func (n *IRCNotifier) ChannelJoined(channel string) bool {
+
+	isJoined, waitJoined := n.channelReconciler.JoinChannel(channel)
+	if isJoined {
+		return true
+	}
+
+	select {
+	case <-waitJoined:
+		return true
+	case <-time.After(ircJoinWaitSecs * time.Second):
+		log.Printf("Channel %s not joined after %d seconds, giving bad news to caller", channel, ircJoinWaitSecs)
+		return false
+	case <-n.stopCtx.Done():
+		log.Printf("Context canceled while waiting for join on channel %s", channel)
+		return false
+	}
+}
+
+func (n *IRCNotifier) SendAlertMsg(alertMsg *AlertMsg) {
 	if !n.sessionUp {
-		log.Printf("Cannot send alert to %s : IRC not connected",
-			alertMsg.Channel)
+		log.Printf("Cannot send alert to %s : IRC not connected", alertMsg.Channel)
 		ircSendMsgErrors.WithLabelValues(alertMsg.Channel, "not_connected").Inc()
 		return
 	}
-	n.channelReconciler.JoinChannel(&IRCChannel{Name: alertMsg.Channel})
+	if !n.ChannelJoined(alertMsg.Channel) {
+		log.Printf("Cannot send alert to %s : cannot join channel", alertMsg.Channel)
+		ircSendMsgErrors.WithLabelValues(alertMsg.Channel, "not_joined").Inc()
+		return
+	}
 
 	if n.UsePrivmsg {
 		n.Client.Privmsg(alertMsg.Channel, alertMsg.Alert)
@@ -213,10 +235,10 @@ func (n *IRCNotifier) ShutdownPhase() {
 func (n *IRCNotifier) ConnectedPhase() {
 	select {
 	case alertMsg := <-n.AlertMsgs:
-		n.MaybeSendAlertMsg(&alertMsg)
+		n.SendAlertMsg(&alertMsg)
 	case <-n.sessionDownSignal:
 		n.sessionUp = false
-		n.channelReconciler.CleanupChannels()
+		n.channelReconciler.Stop()
 		n.Client.Quit("see ya")
 		ircConnectedGauge.Set(0)
 	case <-n.stopCtx.Done():
@@ -240,7 +262,7 @@ func (n *IRCNotifier) SetupPhase() {
 	case <-n.sessionUpSignal:
 		n.sessionUp = true
 		n.MaybeIdentifyNick()
-		n.channelReconciler.JoinChannels()
+		n.channelReconciler.Start(n.stopCtx)
 		ircConnectedGauge.Set(1)
 	case <-n.sessionDownSignal:
 		log.Printf("Receiving a session down before the session is up, this is odd")

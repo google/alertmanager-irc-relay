@@ -29,6 +29,12 @@ import (
 
 type LineHandlerFunc func(*bufio.ReadWriter, *irc.Line) error
 
+func hJOIN(conn *bufio.ReadWriter, line *irc.Line) error {
+	r := fmt.Sprintf(":foo!foo@example.com JOIN :%s\n", line.Args[0])
+	_, err := conn.WriteString(r)
+	return err
+}
+
 func hUSER(conn *bufio.ReadWriter, line *irc.Line) error {
 	r := fmt.Sprintf(":example.com 001 %s :Welcome\n", line.Args[0])
 	_, err := conn.WriteString(r)
@@ -61,6 +67,7 @@ func (s *testServer) setDefaultHandlers() {
 	if s.lineHandlers == nil {
 		s.lineHandlers = make(map[string]LineHandlerFunc)
 	}
+	s.lineHandlers["JOIN"] = hJOIN
 	s.lineHandlers["USER"] = hUSER
 	s.lineHandlers["QUIT"] = hQUIT
 }

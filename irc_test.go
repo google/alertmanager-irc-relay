@@ -108,7 +108,7 @@ func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 		if line.Args[0] == testChannel {
 			testStep.Done()
 		}
-		return nil
+		return hJOIN(conn, line)
 	}
 	server.SetHandler("JOIN", joinedHandler)
 
@@ -117,7 +117,7 @@ func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 
 	testStep.Wait()
 
-	server.SetHandler("JOIN", nil)
+	server.SetHandler("JOIN", hJOIN)
 
 	noticeHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		testStep.Done()
@@ -163,7 +163,7 @@ func TestUsePrivmsgToSendAlertOnPreJoinedChannel(t *testing.T) {
 		if line.Args[0] == testChannel {
 			testStep.Done()
 		}
-		return nil
+		return hJOIN(conn, line)
 	}
 	server.SetHandler("JOIN", joinedHandler)
 
@@ -172,7 +172,7 @@ func TestUsePrivmsgToSendAlertOnPreJoinedChannel(t *testing.T) {
 
 	testStep.Wait()
 
-	server.SetHandler("JOIN", nil)
+	server.SetHandler("JOIN", hJOIN)
 
 	privmsgHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		testStep.Done()
@@ -215,7 +215,7 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 	// ordering.
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		testStep.Done()
-		return nil
+		return hJOIN(conn, line)
 	}
 	server.SetHandler("JOIN", joinHandler)
 
@@ -224,7 +224,7 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 
 	testStep.Wait()
 
-	server.SetHandler("JOIN", nil)
+	server.SetHandler("JOIN", hJOIN)
 
 	noticeHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		testStep.Done()
@@ -295,7 +295,7 @@ func TestSendAlertDisconnected(t *testing.T) {
 	testStep.Add(1)
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		testStep.Done()
-		return nil
+		return hJOIN(conn, line)
 	}
 	server.SetHandler("JOIN", joinHandler)
 
@@ -339,7 +339,7 @@ func TestReconnect(t *testing.T) {
 
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		testStep.Done()
-		return nil
+		return hJOIN(conn, line)
 	}
 	server.SetHandler("JOIN", joinHandler)
 
@@ -409,7 +409,7 @@ func TestConnectErrorRetry(t *testing.T) {
 	joinStep.Add(1)
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		joinStep.Done()
-		return nil
+		return hJOIN(conn, line)
 	}
 	server.SetHandler("JOIN", joinHandler)
 	server.SetCloseEarly(nil)
@@ -446,7 +446,7 @@ func TestIdentify(t *testing.T) {
 	// after identification).
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		testStep.Done()
-		return nil
+		return hJOIN(conn, line)
 	}
 	server.SetHandler("JOIN", joinHandler)
 
@@ -498,7 +498,7 @@ func TestGhostAndIdentify(t *testing.T) {
 	// after identification).
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		testStep.Done()
-		return nil
+		return hJOIN(conn, line)
 	}
 	server.SetHandler("JOIN", joinHandler)
 

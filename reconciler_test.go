@@ -16,7 +16,9 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 
@@ -63,12 +65,14 @@ func TestPreJoinChannels(t *testing.T) {
 
 	var testStep sync.WaitGroup
 
+	joinedChannels := []string{}
+
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		// #baz is configured as the last channel to pre-join
-		if line.Args[0] == "#baz" {
+		joinedChannels = append(joinedChannels, line.Args[0])
+		if len(joinedChannels) == 3 {
 			testStep.Done()
 		}
-		return nil
+		return hJOIN(conn, line)
 	}
 	server.SetHandler("JOIN", joinHandler)
 
@@ -77,25 +81,20 @@ func TestPreJoinChannels(t *testing.T) {
 	reconciler.client.Connect()
 
 	<-sessionUp
-	reconciler.JoinChannels()
+	reconciler.Start(context.Background())
 
 	testStep.Wait()
 
 	reconciler.client.Quit("see ya")
 	<-sessionDown
+	reconciler.Stop()
 
 	server.Stop()
 
-	expectedCommands := []string{
-		"NICK foo",
-		"USER foo 12 * :",
-		"JOIN #foo",
-		"JOIN #bar",
-		"JOIN #baz",
-		"QUIT :see ya",
-	}
+	expectedJoinedChannels := []string{"#bar", "#baz", "#foo"}
+	sort.Strings(joinedChannels)
 
-	if !reflect.DeepEqual(expectedCommands, server.Log) {
+	if !reflect.DeepEqual(expectedJoinedChannels, joinedChannels) {
 		t.Error("Did not pre-join channels")
 	}
 }
