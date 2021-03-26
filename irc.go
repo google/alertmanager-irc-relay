@@ -57,11 +57,6 @@ func loggerHandler(_ *irc.Conn, line *irc.Line) {
 	log.Printf("Received: '%s'", line.Raw)
 }
 
-type ChannelState struct {
-	Channel        IRCChannel
-	BackoffCounter Delayer
-}
-
 type IRCNotifier struct {
 	// Nick stores the nickname specified in the config, because irc.Client
 	// might change its copy.
@@ -82,8 +77,7 @@ type IRCNotifier struct {
 	sessionUpSignal   chan bool
 	sessionDownSignal chan bool
 
-	PreJoinChannels []IRCChannel
-	JoinedChannels  map[string]ChannelState
+	channelReconciler *ChannelReconciler
 
 	UsePrivmsg bool
 
@@ -108,21 +102,24 @@ func NewIRCNotifier(stopCtx context.Context, stopWg *sync.WaitGroup, config *Con
 	ircConfig.Timeout = connectionTimeoutSecs * time.Second
 	ircConfig.NewNick = func(n string) string { return n + "^" }
 
+	client := irc.Client(ircConfig)
+
 	backoffCounter := delayerMaker.NewDelayer(
 		ircConnectMaxBackoffSecs, ircConnectBackoffResetSecs,
 		time.Second)
 
+	channelReconciler := NewChannelReconciler(config, client, delayerMaker)
+
 	notifier := &IRCNotifier{
 		Nick:              config.IRCNick,
 		NickPassword:      config.IRCNickPass,
-		Client:            irc.Client(ircConfig),
+		Client:            client,
 		AlertMsgs:         alertMsgs,
 		stopCtx:           stopCtx,
 		stopWg:            stopWg,
 		sessionUpSignal:   make(chan bool),
 		sessionDownSignal: make(chan bool),
-		PreJoinChannels:   config.IRCChannels,
-		JoinedChannels:    make(map[string]ChannelState),
+		channelReconciler: channelReconciler,
 		UsePrivmsg:        config.UsePrivmsg,
 		NickservDelayWait: nickservWaitSecs * time.Second,
 		BackoffCounter:    backoffCounter,
@@ -146,60 +143,8 @@ func (n *IRCNotifier) registerHandlers() {
 			n.sessionDownSignal <- false
 		})
 
-	n.Client.HandleFunc(irc.KICK,
-		func(_ *irc.Conn, line *irc.Line) {
-			n.HandleKick(line.Args[1], line.Args[0])
-		})
-
 	for _, event := range []string{irc.NOTICE, "433"} {
 		n.Client.HandleFunc(event, loggerHandler)
-	}
-}
-
-func (n *IRCNotifier) HandleKick(nick string, channel string) {
-	if nick != n.Client.Me().Nick {
-		// received kick info for somebody else
-		return
-	}
-	state, ok := n.JoinedChannels[channel]
-	if !ok {
-		log.Printf("Being kicked out of non-joined channel (%s), ignoring", channel)
-		return
-	}
-	log.Printf("Being kicked out of %s, re-joining", channel)
-	go func() {
-		if ok := state.BackoffCounter.DelayContext(n.stopCtx); !ok {
-			return
-		}
-		n.Client.Join(state.Channel.Name, state.Channel.Password)
-	}()
-
-}
-
-func (n *IRCNotifier) CleanupChannels() {
-	log.Printf("Deregistering all channels.")
-	n.JoinedChannels = make(map[string]ChannelState)
-}
-
-func (n *IRCNotifier) JoinChannel(channel *IRCChannel) {
-	if _, joined := n.JoinedChannels[channel.Name]; joined {
-		return
-	}
-	log.Printf("Joining %s", channel.Name)
-	n.Client.Join(channel.Name, channel.Password)
-	bm := BackoffMaker{}
-	state := ChannelState{
-		Channel: *channel,
-		BackoffCounter: bm.NewDelayer(
-			ircConnectMaxBackoffSecs, ircConnectBackoffResetSecs,
-			time.Second),
-	}
-	n.JoinedChannels[channel.Name] = state
-}
-
-func (n *IRCNotifier) JoinChannels() {
-	for _, channel := range n.PreJoinChannels {
-		n.JoinChannel(&channel)
 	}
 }
 
@@ -233,7 +178,7 @@ func (n *IRCNotifier) MaybeSendAlertMsg(alertMsg *AlertMsg) {
 		ircSendMsgErrors.WithLabelValues(alertMsg.Channel, "not_connected").Inc()
 		return
 	}
-	n.JoinChannel(&IRCChannel{Name: alertMsg.Channel})
+	n.channelReconciler.JoinChannel(&IRCChannel{Name: alertMsg.Channel})
 
 	if n.UsePrivmsg {
 		n.Client.Privmsg(alertMsg.Channel, alertMsg.Alert)
@@ -265,7 +210,7 @@ func (n *IRCNotifier) ConnectedPhase() {
 		n.MaybeSendAlertMsg(&alertMsg)
 	case <-n.sessionDownSignal:
 		n.sessionUp = false
-		n.CleanupChannels()
+		n.channelReconciler.CleanupChannels()
 		n.Client.Quit("see ya")
 		ircConnectedGauge.Set(0)
 	case <-n.stopCtx.Done():
@@ -289,7 +234,7 @@ func (n *IRCNotifier) SetupPhase() {
 	case <-n.sessionUpSignal:
 		n.sessionUp = true
 		n.MaybeIdentifyNick()
-		n.JoinChannels()
+		n.channelReconciler.JoinChannels()
 		ircConnectedGauge.Set(1)
 	case <-n.sessionDownSignal:
 		log.Printf("Receiving a session down before the session is up, this is odd")
