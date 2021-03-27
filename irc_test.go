@@ -555,7 +555,7 @@ func TestStopRunningWhenHalfConnected(t *testing.T) {
 	config := makeTestIRCConfig(port)
 	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
 
-	var testStep, holdQuitWait sync.WaitGroup
+	var testStep sync.WaitGroup
 
 	// Send a StopRunning request while the client is connected but the
 	// session is not up
@@ -567,23 +567,12 @@ func TestStopRunningWhenHalfConnected(t *testing.T) {
 	}
 	server.SetHandler("USER", holdUser)
 
-	// Ignore quit, but wait for it to have deterministic test commands
-	holdQuitWait.Add(1)
-	holdQuit := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		log.Printf("=Server= Ignoring quit")
-		holdQuitWait.Done()
-		return nil
-	}
-	server.SetHandler("QUIT", holdQuit)
-
 	go notifier.Run(ctx, stopWg)
 
 	testStep.Wait()
 
 	cancel()
 	stopWg.Wait()
-
-	holdQuitWait.Wait()
 
 	// Client has left, cleanup the server side before stopping
 	server.Client.Close()
