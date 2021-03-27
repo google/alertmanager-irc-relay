@@ -59,12 +59,12 @@ func main() {
 	alertMsgs := make(chan AlertMsg, config.AlertBufferSize)
 
 	stopWg.Add(1)
-	ircNotifier, err := NewIRCNotifier(ctx, &stopWg, config, alertMsgs, &BackoffMaker{})
+	ircNotifier, err := NewIRCNotifier(config, alertMsgs, &BackoffMaker{})
 	if err != nil {
 		log.Printf("Could not create IRC notifier: %s", err)
 		return
 	}
-	go ircNotifier.Run()
+	go ircNotifier.Run(ctx, &stopWg)
 
 	httpServer, err := NewHTTPServer(config, alertMsgs)
 	if err != nil {

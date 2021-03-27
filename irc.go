@@ -84,9 +84,6 @@ type IRCNotifier struct {
 	Client       *irc.Conn
 	AlertMsgs    chan AlertMsg
 
-	stopCtx context.Context
-	stopWg  *sync.WaitGroup
-
 	// irc.Conn has a Connected() method that can tell us wether the TCP
 	// connection is up, and thus if we should trigger connect/disconnect.
 	// We need to track the session establishment also at a higher level to
@@ -104,7 +101,7 @@ type IRCNotifier struct {
 	BackoffCounter    Delayer
 }
 
-func NewIRCNotifier(stopCtx context.Context, stopWg *sync.WaitGroup, config *Config, alertMsgs chan AlertMsg, delayerMaker DelayerMaker) (*IRCNotifier, error) {
+func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker DelayerMaker) (*IRCNotifier, error) {
 
 	ircConfig := makeGOIRCConfig(config)
 
@@ -121,8 +118,6 @@ func NewIRCNotifier(stopCtx context.Context, stopWg *sync.WaitGroup, config *Con
 		NickPassword:      config.IRCNickPass,
 		Client:            client,
 		AlertMsgs:         alertMsgs,
-		stopCtx:           stopCtx,
-		stopWg:            stopWg,
 		sessionUpSignal:   make(chan bool),
 		sessionDownSignal: make(chan bool),
 		channelReconciler: channelReconciler,
@@ -177,7 +172,7 @@ func (n *IRCNotifier) MaybeIdentifyNick() {
 	time.Sleep(n.NickservDelayWait)
 }
 
-func (n *IRCNotifier) ChannelJoined(channel string) bool {
+func (n *IRCNotifier) ChannelJoined(ctx context.Context, channel string) bool {
 
 	isJoined, waitJoined := n.channelReconciler.JoinChannel(channel)
 	if isJoined {
@@ -190,19 +185,19 @@ func (n *IRCNotifier) ChannelJoined(channel string) bool {
 	case <-time.After(ircJoinWaitSecs * time.Second):
 		log.Printf("Channel %s not joined after %d seconds, giving bad news to caller", channel, ircJoinWaitSecs)
 		return false
-	case <-n.stopCtx.Done():
+	case <-ctx.Done():
 		log.Printf("Context canceled while waiting for join on channel %s", channel)
 		return false
 	}
 }
 
-func (n *IRCNotifier) SendAlertMsg(alertMsg *AlertMsg) {
+func (n *IRCNotifier) SendAlertMsg(ctx context.Context, alertMsg *AlertMsg) {
 	if !n.sessionUp {
 		log.Printf("Cannot send alert to %s : IRC not connected", alertMsg.Channel)
 		ircSendMsgErrors.WithLabelValues(alertMsg.Channel, "not_connected").Inc()
 		return
 	}
-	if !n.ChannelJoined(alertMsg.Channel) {
+	if !n.ChannelJoined(ctx, alertMsg.Channel) {
 		log.Printf("Cannot send alert to %s : cannot join channel", alertMsg.Channel)
 		ircSendMsgErrors.WithLabelValues(alertMsg.Channel, "not_joined").Inc()
 		return
@@ -232,27 +227,27 @@ func (n *IRCNotifier) ShutdownPhase() {
 	}
 }
 
-func (n *IRCNotifier) ConnectedPhase() {
+func (n *IRCNotifier) ConnectedPhase(ctx context.Context) {
 	select {
 	case alertMsg := <-n.AlertMsgs:
-		n.SendAlertMsg(&alertMsg)
+		n.SendAlertMsg(ctx, &alertMsg)
 	case <-n.sessionDownSignal:
 		n.sessionUp = false
 		n.channelReconciler.Stop()
 		n.Client.Quit("see ya")
 		ircConnectedGauge.Set(0)
-	case <-n.stopCtx.Done():
+	case <-ctx.Done():
 		log.Printf("IRC routine asked to terminate")
 	}
 }
 
-func (n *IRCNotifier) SetupPhase() {
+func (n *IRCNotifier) SetupPhase(ctx context.Context) {
 	if !n.Client.Connected() {
 		log.Printf("Connecting to IRC %s", n.Client.Config().Server)
-		if ok := n.BackoffCounter.DelayContext(n.stopCtx); !ok {
+		if ok := n.BackoffCounter.DelayContext(ctx); !ok {
 			return
 		}
-		if err := n.Client.ConnectContext(n.stopCtx); err != nil {
+		if err := n.Client.ConnectContext(ctx); err != nil {
 			log.Printf("Could not connect to IRC: %s", err)
 			return
 		}
@@ -262,23 +257,23 @@ func (n *IRCNotifier) SetupPhase() {
 	case <-n.sessionUpSignal:
 		n.sessionUp = true
 		n.MaybeIdentifyNick()
-		n.channelReconciler.Start(n.stopCtx)
+		n.channelReconciler.Start(ctx)
 		ircConnectedGauge.Set(1)
 	case <-n.sessionDownSignal:
 		log.Printf("Receiving a session down before the session is up, this is odd")
-	case <-n.stopCtx.Done():
+	case <-ctx.Done():
 		log.Printf("IRC routine asked to terminate")
 	}
 }
 
-func (n *IRCNotifier) Run() {
-	defer n.stopWg.Done()
+func (n *IRCNotifier) Run(ctx context.Context, stopWg *sync.WaitGroup) {
+	defer stopWg.Done()
 
-	for n.stopCtx.Err() != context.Canceled {
+	for ctx.Err() != context.Canceled {
 		if !n.sessionUp {
-			n.SetupPhase()
+			n.SetupPhase(ctx)
 		} else {
-			n.ConnectedPhase()
+			n.ConnectedPhase(ctx)
 		}
 	}
 	n.ShutdownPhase()

@@ -42,26 +42,26 @@ func makeTestIRCConfig(IRCPort int) *Config {
 	}
 }
 
-func makeTestNotifier(t *testing.T, config *Config) (*IRCNotifier, chan AlertMsg, context.CancelFunc, *sync.WaitGroup) {
+func makeTestNotifier(t *testing.T, config *Config) (*IRCNotifier, chan AlertMsg, context.Context, context.CancelFunc, *sync.WaitGroup) {
 	fakeDelayerMaker := &FakeDelayerMaker{}
 	alertMsgs := make(chan AlertMsg)
 	ctx, cancel := context.WithCancel(context.Background())
 	stopWg := sync.WaitGroup{}
 	stopWg.Add(1)
-	notifier, err := NewIRCNotifier(ctx, &stopWg, config, alertMsgs, fakeDelayerMaker)
+	notifier, err := NewIRCNotifier(config, alertMsgs, fakeDelayerMaker)
 	if err != nil {
 		t.Fatal(fmt.Sprintf("Could not create IRC notifier: %s", err))
 	}
 	notifier.Client.Config().Flood = true
 
-	return notifier, alertMsgs, cancel, &stopWg
+	return notifier, alertMsgs, ctx, cancel, &stopWg
 }
 
 func TestServerPassword(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
 	config.IRCHostPass = "hostsecret"
-	notifier, _, cancel, _ := makeTestNotifier(t, config)
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
 
 	var testStep sync.WaitGroup
 
@@ -72,11 +72,13 @@ func TestServerPassword(t *testing.T) {
 	server.SetHandler("JOIN", joinHandler)
 
 	testStep.Add(1)
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	testStep.Wait()
 
 	cancel()
+	stopWg.Wait()
+
 	server.Stop()
 
 	expectedCommands := []string{
@@ -95,7 +97,7 @@ func TestServerPassword(t *testing.T) {
 func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
-	notifier, alertMsgs, cancel, _ := makeTestNotifier(t, config)
+	notifier, alertMsgs, ctx, cancel, stopWg := makeTestNotifier(t, config)
 
 	var testStep sync.WaitGroup
 
@@ -113,7 +115,7 @@ func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 	server.SetHandler("JOIN", joinedHandler)
 
 	testStep.Add(1)
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	testStep.Wait()
 
@@ -131,6 +133,8 @@ func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 	testStep.Wait()
 
 	cancel()
+	stopWg.Wait()
+
 	server.Stop()
 
 	expectedCommands := []string{
@@ -150,7 +154,7 @@ func TestUsePrivmsgToSendAlertOnPreJoinedChannel(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
 	config.UsePrivmsg = true
-	notifier, alertMsgs, cancel, _ := makeTestNotifier(t, config)
+	notifier, alertMsgs, ctx, cancel, stopWg := makeTestNotifier(t, config)
 
 	var testStep sync.WaitGroup
 
@@ -168,7 +172,7 @@ func TestUsePrivmsgToSendAlertOnPreJoinedChannel(t *testing.T) {
 	server.SetHandler("JOIN", joinedHandler)
 
 	testStep.Add(1)
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	testStep.Wait()
 
@@ -186,6 +190,8 @@ func TestUsePrivmsgToSendAlertOnPreJoinedChannel(t *testing.T) {
 	testStep.Wait()
 
 	cancel()
+	stopWg.Wait()
+
 	server.Stop()
 
 	expectedCommands := []string{
@@ -204,7 +210,7 @@ func TestUsePrivmsgToSendAlertOnPreJoinedChannel(t *testing.T) {
 func TestSendAlertAndJoinChannel(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
-	notifier, alertMsgs, cancel, _ := makeTestNotifier(t, config)
+	notifier, alertMsgs, ctx, cancel, stopWg := makeTestNotifier(t, config)
 
 	var testStep sync.WaitGroup
 
@@ -220,7 +226,7 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 	server.SetHandler("JOIN", joinHandler)
 
 	testStep.Add(1)
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	testStep.Wait()
 
@@ -238,6 +244,8 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 	testStep.Wait()
 
 	cancel()
+	stopWg.Wait()
+
 	server.Stop()
 
 	expectedCommands := []string{
@@ -258,7 +266,7 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 func TestSendAlertDisconnected(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
-	notifier, alertMsgs, cancel, _ := makeTestNotifier(t, config)
+	notifier, alertMsgs, ctx, cancel, stopWg := makeTestNotifier(t, config)
 
 	var testStep, holdUserStep sync.WaitGroup
 
@@ -278,7 +286,7 @@ func TestSendAlertDisconnected(t *testing.T) {
 	}
 	server.SetHandler("USER", holdUser)
 
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	// Alert channels is not consumed while disconnected
 	select {
@@ -314,6 +322,8 @@ func TestSendAlertDisconnected(t *testing.T) {
 	testStep.Wait()
 
 	cancel()
+	stopWg.Wait()
+
 	server.Stop()
 
 	expectedCommands := []string{
@@ -333,7 +343,7 @@ func TestSendAlertDisconnected(t *testing.T) {
 func TestReconnect(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
-	notifier, _, cancel, _ := makeTestNotifier(t, config)
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
 
 	var testStep sync.WaitGroup
 
@@ -344,7 +354,7 @@ func TestReconnect(t *testing.T) {
 	server.SetHandler("JOIN", joinHandler)
 
 	testStep.Add(1)
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	// Wait until the pre-joined channel is seen.
 	testStep.Wait()
@@ -357,6 +367,8 @@ func TestReconnect(t *testing.T) {
 	testStep.Wait()
 
 	cancel()
+	stopWg.Wait()
+
 	server.Stop()
 
 	expectedCommands := []string{
@@ -382,7 +394,7 @@ func TestConnectErrorRetry(t *testing.T) {
 	// Attempt SSL handshake. The server does not support it, resulting in
 	// a connection error.
 	config.IRCUseSSL = true
-	notifier, _, cancel, _ := makeTestNotifier(t, config)
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
 	// Pilot reconnect attempts via backoff delay to prevent race
 	// conditions in the test while we change the components behavior on
 	// the fly.
@@ -398,7 +410,7 @@ func TestConnectErrorRetry(t *testing.T) {
 
 	server.SetCloseEarly(earlyHandler)
 
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	delayer.StopDelay <- true
 
@@ -419,6 +431,8 @@ func TestConnectErrorRetry(t *testing.T) {
 	joinStep.Wait()
 
 	cancel()
+	stopWg.Wait()
+
 	server.Stop()
 
 	expectedCommands := []string{
@@ -437,7 +451,7 @@ func TestIdentify(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
 	config.IRCNickPass = "nickpassword"
-	notifier, _, cancel, _ := makeTestNotifier(t, config)
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
 	notifier.NickservDelayWait = 0 * time.Second
 
 	var testStep sync.WaitGroup
@@ -451,11 +465,13 @@ func TestIdentify(t *testing.T) {
 	server.SetHandler("JOIN", joinHandler)
 
 	testStep.Add(1)
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	testStep.Wait()
 
 	cancel()
+	stopWg.Wait()
+
 	server.Stop()
 
 	expectedCommands := []string{
@@ -475,7 +491,7 @@ func TestGhostAndIdentify(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
 	config.IRCNickPass = "nickpassword"
-	notifier, _, cancel, _ := makeTestNotifier(t, config)
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
 	notifier.NickservDelayWait = 0 * time.Second
 
 	var testStep, usedNick, unregisteredNickHandler sync.WaitGroup
@@ -503,7 +519,7 @@ func TestGhostAndIdentify(t *testing.T) {
 	server.SetHandler("JOIN", joinHandler)
 
 	testStep.Add(1)
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	usedNick.Wait()
 	server.SetHandler("NICK", nil)
@@ -512,6 +528,8 @@ func TestGhostAndIdentify(t *testing.T) {
 	testStep.Wait()
 
 	cancel()
+	stopWg.Wait()
+
 	server.Stop()
 
 	expectedCommands := []string{
@@ -533,7 +551,7 @@ func TestGhostAndIdentify(t *testing.T) {
 func TestStopRunningWhenHalfConnected(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
-	notifier, _, cancel, stopWg := makeTestNotifier(t, config)
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
 
 	var testStep, holdQuitWait sync.WaitGroup
 
@@ -556,12 +574,11 @@ func TestStopRunningWhenHalfConnected(t *testing.T) {
 	}
 	server.SetHandler("QUIT", holdQuit)
 
-	go notifier.Run()
+	go notifier.Run(ctx, stopWg)
 
 	testStep.Wait()
 
 	cancel()
-
 	stopWg.Wait()
 
 	holdQuitWait.Wait()
