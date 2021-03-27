@@ -18,28 +18,9 @@ import (
 	"context"
 	"flag"
 	"log"
-	"os"
-	"os/signal"
 	"sync"
 	"syscall"
 )
-
-func WithSignal(ctx context.Context, s ...os.Signal) (context.Context, context.CancelFunc) {
-	ctx, cancel := context.WithCancel(ctx)
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, s...)
-	go func() {
-		select {
-		case <-c:
-			log.Printf("Received %s, exiting", s)
-			cancel()
-		case <-ctx.Done():
-			cancel()
-		}
-		signal.Stop(c)
-	}()
-	return ctx, cancel
-}
 
 func main() {
 

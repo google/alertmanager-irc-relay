@@ -582,7 +582,6 @@ func TestStopRunningWhenHalfConnected(t *testing.T) {
 	expectedCommands := []string{
 		"NICK foo",
 		"USER foo 12 * :",
-		"QUIT :see ya",
 	}
 
 	if !reflect.DeepEqual(expectedCommands, server.Log) {

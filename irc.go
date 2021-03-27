@@ -92,6 +92,7 @@ type IRCNotifier struct {
 	sessionUp         bool
 	sessionUpSignal   chan bool
 	sessionDownSignal chan bool
+	sessionWg         sync.WaitGroup
 
 	channelReconciler *ChannelReconciler
 
@@ -212,19 +213,19 @@ func (n *IRCNotifier) SendAlertMsg(ctx context.Context, alertMsg *AlertMsg) {
 }
 
 func (n *IRCNotifier) ShutdownPhase() {
-	if n.Client.Connected() {
+	if n.sessionUp {
 		log.Printf("IRC client connected, quitting")
 		n.Client.Quit("see ya")
 
-		if n.sessionUp {
-			log.Printf("Session is up, wait for IRC disconnect to complete")
-			select {
-			case <-n.sessionDownSignal:
-			case <-time.After(n.Client.Config().Timeout):
-				log.Printf("Timeout while waiting for IRC disconnect to complete, stopping anyway")
-			}
+		log.Printf("Wait for IRC disconnect to complete")
+		select {
+		case <-n.sessionDownSignal:
+		case <-time.After(n.Client.Config().Timeout):
+			log.Printf("Timeout while waiting for IRC disconnect to complete, stopping anyway")
 		}
+		n.sessionWg.Done()
 	}
+	log.Printf("IRC shutdown complete")
 }
 
 func (n *IRCNotifier) ConnectedPhase(ctx context.Context) {
@@ -233,6 +234,7 @@ func (n *IRCNotifier) ConnectedPhase(ctx context.Context) {
 		n.SendAlertMsg(ctx, &alertMsg)
 	case <-n.sessionDownSignal:
 		n.sessionUp = false
+		n.sessionWg.Done()
 		n.channelReconciler.Stop()
 		n.Client.Quit("see ya")
 		ircConnectedGauge.Set(0)
@@ -247,7 +249,7 @@ func (n *IRCNotifier) SetupPhase(ctx context.Context) {
 		if ok := n.BackoffCounter.DelayContext(ctx); !ok {
 			return
 		}
-		if err := n.Client.ConnectContext(ctx); err != nil {
+		if err := n.Client.ConnectContext(WithWaitGroup(ctx, &n.sessionWg)); err != nil {
 			log.Printf("Could not connect to IRC: %s", err)
 			return
 		}
@@ -256,6 +258,7 @@ func (n *IRCNotifier) SetupPhase(ctx context.Context) {
 	select {
 	case <-n.sessionUpSignal:
 		n.sessionUp = true
+		n.sessionWg.Add(1)
 		n.MaybeIdentifyNick()
 		n.channelReconciler.Start(ctx)
 		ircConnectedGauge.Set(1)
