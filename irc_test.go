@@ -494,18 +494,24 @@ func TestGhostAndIdentify(t *testing.T) {
 	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
 	notifier.NickservDelayWait = 0 * time.Second
 
-	var testStep, usedNick, unregisteredNickHandler sync.WaitGroup
+	var testStep sync.WaitGroup
 
-	// Trigger 433 for first nick
-	usedNick.Add(1)
-	unregisteredNickHandler.Add(1)
-	nickHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+	// Trigger 433 for first nick when we see the USER command
+	userHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		var err error
 		if line.Args[0] == "foo" {
 			_, err = conn.WriteString(":example.com 433 * foo :nick in use\n")
 		}
-		usedNick.Done()
-		unregisteredNickHandler.Wait()
+		return err
+	}
+	server.SetHandler("USER", userHandler)
+
+	// Trigger 001 when we see NICK foo^
+	nickHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		var err error
+		if line.Args[0] == "foo^" {
+			_, err = conn.WriteString(":example.com 001 foo^ :Welcome\n")
+		}
 		return err
 	}
 	server.SetHandler("NICK", nickHandler)
@@ -520,10 +526,6 @@ func TestGhostAndIdentify(t *testing.T) {
 
 	testStep.Add(1)
 	go notifier.Run(ctx, stopWg)
-
-	usedNick.Wait()
-	server.SetHandler("NICK", nil)
-	unregisteredNickHandler.Done()
 
 	testStep.Wait()
 
