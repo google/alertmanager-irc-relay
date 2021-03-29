@@ -44,11 +44,14 @@ func makeTestIRCConfig(IRCPort int) *Config {
 
 func makeTestNotifier(t *testing.T, config *Config) (*IRCNotifier, chan AlertMsg, context.Context, context.CancelFunc, *sync.WaitGroup) {
 	fakeDelayerMaker := &FakeDelayerMaker{}
+	fakeTime := &FakeTime{
+		afterChan: make(chan time.Time, 1),
+	}
 	alertMsgs := make(chan AlertMsg)
 	ctx, cancel := context.WithCancel(context.Background())
 	stopWg := sync.WaitGroup{}
 	stopWg.Add(1)
-	notifier, err := NewIRCNotifier(config, alertMsgs, fakeDelayerMaker)
+	notifier, err := NewIRCNotifier(config, alertMsgs, fakeDelayerMaker, fakeTime)
 	if err != nil {
 		t.Fatal(fmt.Sprintf("Could not create IRC notifier: %s", err))
 	}

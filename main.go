@@ -40,7 +40,7 @@ func main() {
 	alertMsgs := make(chan AlertMsg, config.AlertBufferSize)
 
 	stopWg.Add(1)
-	ircNotifier, err := NewIRCNotifier(config, alertMsgs, &BackoffMaker{})
+	ircNotifier, err := NewIRCNotifier(config, alertMsgs, &BackoffMaker{}, &RealTime{})
 	if err != nil {
 		log.Printf("Could not create IRC notifier: %s", err)
 		return

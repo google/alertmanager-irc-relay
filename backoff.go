@@ -50,22 +50,6 @@ func jitterFunc(input int) int {
 	return rand.Intn(input)
 }
 
-// TimeTeller interface allows injection of fake time during testing
-type TimeTeller interface {
-	Now() time.Time
-	After(time.Duration) <-chan time.Time
-}
-
-type RealTime struct{}
-
-func (r *RealTime) Now() time.Time {
-	return time.Now()
-}
-
-func (r *RealTime) After(d time.Duration) <-chan time.Time {
-	return time.After(d)
-}
-
 type BackoffMaker struct{}
 
 func (bm *BackoffMaker) NewDelayer(maxBackoff float64, resetDelta float64, durationUnit time.Duration) Delayer {

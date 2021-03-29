@@ -100,9 +100,10 @@ type IRCNotifier struct {
 
 	NickservDelayWait time.Duration
 	BackoffCounter    Delayer
+	timeTeller        TimeTeller
 }
 
-func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker DelayerMaker) (*IRCNotifier, error) {
+func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker DelayerMaker, timeTeller TimeTeller) (*IRCNotifier, error) {
 
 	ircConfig := makeGOIRCConfig(config)
 
@@ -112,7 +113,7 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker Delaye
 		ircConnectMaxBackoffSecs, ircConnectBackoffResetSecs,
 		time.Second)
 
-	channelReconciler := NewChannelReconciler(config, client, delayerMaker)
+	channelReconciler := NewChannelReconciler(config, client, delayerMaker, timeTeller)
 
 	notifier := &IRCNotifier{
 		Nick:              config.IRCNick,
@@ -125,6 +126,7 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker Delaye
 		UsePrivmsg:        config.UsePrivmsg,
 		NickservDelayWait: nickservWaitSecs * time.Second,
 		BackoffCounter:    backoffCounter,
+		timeTeller:        timeTeller,
 	}
 
 	notifier.registerHandlers()
@@ -183,7 +185,7 @@ func (n *IRCNotifier) ChannelJoined(ctx context.Context, channel string) bool {
 	select {
 	case <-waitJoined:
 		return true
-	case <-time.After(ircJoinWaitSecs * time.Second):
+	case <-n.timeTeller.After(ircJoinWaitSecs * time.Second):
 		log.Printf("Channel %s not joined after %d seconds, giving bad news to caller", channel, ircJoinWaitSecs)
 		return false
 	case <-ctx.Done():
@@ -220,7 +222,7 @@ func (n *IRCNotifier) ShutdownPhase() {
 		log.Printf("Wait for IRC disconnect to complete")
 		select {
 		case <-n.sessionDownSignal:
-		case <-time.After(n.Client.Config().Timeout):
+		case <-n.timeTeller.After(n.Client.Config().Timeout):
 			log.Printf("Timeout while waiting for IRC disconnect to complete, stopping anyway")
 		}
 		n.sessionWg.Done()

@@ -21,21 +21,12 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	irc "github.com/fluffle/goirc/client"
 )
 
-func makeReconcilerTestIRCConfig(IRCPort int) *Config {
-	config := makeTestIRCConfig(IRCPort)
-	config.IRCChannels = []IRCChannel{
-		IRCChannel{Name: "#foo"},
-		IRCChannel{Name: "#bar"},
-		IRCChannel{Name: "#baz"},
-	}
-	return config
-}
-
-func makeTestReconciler(config *Config) (*ChannelReconciler, chan bool, chan bool) {
+func makeTestReconciler(config *Config) (*ChannelReconciler, chan bool, chan bool, *FakeTime) {
 
 	sessionUp := make(chan bool)
 	sessionDown := make(chan bool)
@@ -53,15 +44,23 @@ func makeTestReconciler(config *Config) (*ChannelReconciler, chan bool, chan boo
 		})
 
 	fakeDelayerMaker := &FakeDelayerMaker{}
-	reconciler := NewChannelReconciler(config, client, fakeDelayerMaker)
+	fakeTime := &FakeTime{
+		afterChan: make(chan time.Time, 1),
+	}
+	reconciler := NewChannelReconciler(config, client, fakeDelayerMaker, fakeTime)
 
-	return reconciler, sessionUp, sessionDown
+	return reconciler, sessionUp, sessionDown, fakeTime
 }
 
 func TestPreJoinChannels(t *testing.T) {
 	server, port := makeTestServer(t)
-	config := makeReconcilerTestIRCConfig(port)
-	reconciler, sessionUp, sessionDown := makeTestReconciler(config)
+	config := makeTestIRCConfig(port)
+	config.IRCChannels = []IRCChannel{
+		IRCChannel{Name: "#foo"},
+		IRCChannel{Name: "#bar"},
+		IRCChannel{Name: "#baz"},
+	}
+	reconciler, sessionUp, sessionDown, _ := makeTestReconciler(config)
 
 	var testStep sync.WaitGroup
 
@@ -97,4 +96,87 @@ func TestPreJoinChannels(t *testing.T) {
 	if !reflect.DeepEqual(expectedJoinedChannels, joinedChannels) {
 		t.Error("Did not pre-join channels")
 	}
+}
+
+func TestKeepJoining(t *testing.T) {
+	server, port := makeTestServer(t)
+	config := makeTestIRCConfig(port)
+	reconciler, sessionUp, sessionDown, fakeTime := makeTestReconciler(config)
+
+	var testStep sync.WaitGroup
+
+	var joinedCounter int
+
+	// Confirm join only after a few attempts
+	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		joinedCounter++
+
+		if joinedCounter == 3 {
+			testStep.Done()
+			return hJOIN(conn, line)
+		} else {
+			fakeTime.afterChan <- time.Now()
+		}
+		return nil
+	}
+	server.SetHandler("JOIN", joinHandler)
+
+	testStep.Add(1)
+
+	reconciler.client.Connect()
+
+	<-sessionUp
+	reconciler.Start(context.Background())
+
+	testStep.Wait()
+
+	reconciler.client.Quit("see ya")
+	<-sessionDown
+	reconciler.Stop()
+
+	server.Stop()
+
+	expectedJoinedCounter := 3
+
+	if !reflect.DeepEqual(expectedJoinedCounter, joinedCounter) {
+		t.Error("Did not keep joining")
+	}
+}
+
+func TestKickRejoin(t *testing.T) {
+	server, port := makeTestServer(t)
+	config := makeTestIRCConfig(port)
+	reconciler, sessionUp, sessionDown, _ := makeTestReconciler(config)
+
+	var testStep sync.WaitGroup
+
+	// Wait for channel to be joined
+	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		hJOIN(conn, line)
+		testStep.Done()
+		return nil
+	}
+	server.SetHandler("JOIN", joinHandler)
+
+	testStep.Add(1)
+
+	reconciler.client.Connect()
+
+	<-sessionUp
+	reconciler.Start(context.Background())
+
+	testStep.Wait()
+
+	// Kick and wait for channel to be joined again
+	testStep.Add(1)
+	server.SendMsg(":test!~test@example.com KICK #foo foo :Bye!\n")
+
+	testStep.Wait()
+
+	reconciler.client.Quit("see ya")
+	<-sessionDown
+	reconciler.Stop()
+
+	server.Stop()
+
 }

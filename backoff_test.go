@@ -20,24 +20,6 @@ import (
 	"time"
 )
 
-type FakeTime struct {
-	timeseries   []int
-	lastIndex    int
-	durationUnit time.Duration
-	afterChan    chan time.Time
-}
-
-func (f *FakeTime) Now() time.Time {
-	timeDelta := time.Duration(f.timeseries[f.lastIndex]) * f.durationUnit
-	fakeTime := time.Unix(0, 0).Add(timeDelta)
-	f.lastIndex++
-	return fakeTime
-}
-
-func (f *FakeTime) After(d time.Duration) <-chan time.Time {
-	return f.afterChan
-}
-
 func FakeJitter(input int) int {
 	return input
 }

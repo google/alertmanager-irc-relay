@@ -32,7 +32,9 @@ const (
 type channelState struct {
 	channel IRCChannel
 	client  *irc.Conn
-	delayer Delayer
+
+	delayer    Delayer
+	timeTeller TimeTeller
 
 	joinDone chan struct{} // joined when channel is closed
 	joined   bool
@@ -42,13 +44,14 @@ type channelState struct {
 	mu sync.Mutex
 }
 
-func newChannelState(channel *IRCChannel, client *irc.Conn, delayerMaker DelayerMaker) *channelState {
+func newChannelState(channel *IRCChannel, client *irc.Conn, delayerMaker DelayerMaker, timeTeller TimeTeller) *channelState {
 	delayer := delayerMaker.NewDelayer(ircJoinMaxBackoffSecs, ircJoinBackoffResetSecs, time.Second)
 
 	return &channelState{
 		channel:         *channel,
 		client:          client,
 		delayer:         delayer,
+		timeTeller:      timeTeller,
 		joinDone:        make(chan struct{}),
 		joined:          false,
 		joinUnsetSignal: make(chan bool),
@@ -108,7 +111,7 @@ func (c *channelState) join(ctx context.Context) {
 	select {
 	case <-c.JoinDone():
 		log.Printf("Channel %s monitor: join succeeded", c.channel.Name)
-	case <-time.After(ircJoinWaitSecs * time.Second):
+	case <-c.timeTeller.After(ircJoinWaitSecs * time.Second):
 		log.Printf("Channel %s monitor: could not join after %d seconds, will retry", c.channel.Name, ircJoinWaitSecs)
 	case <-ctx.Done():
 		log.Printf("Channel %s monitor: context canceled while waiting for join", c.channel.Name)
@@ -147,6 +150,7 @@ type ChannelReconciler struct {
 	client          *irc.Conn
 
 	delayerMaker DelayerMaker
+	timeTeller   TimeTeller
 
 	channels map[string]*channelState
 
@@ -157,11 +161,12 @@ type ChannelReconciler struct {
 	mu sync.Mutex
 }
 
-func NewChannelReconciler(config *Config, client *irc.Conn, delayerMaker DelayerMaker) *ChannelReconciler {
+func NewChannelReconciler(config *Config, client *irc.Conn, delayerMaker DelayerMaker, timeTeller TimeTeller) *ChannelReconciler {
 	reconciler := &ChannelReconciler{
 		preJoinChannels: config.IRCChannels,
 		client:          client,
 		delayerMaker:    delayerMaker,
+		timeTeller:      timeTeller,
 		channels:        make(map[string]*channelState),
 	}
 
@@ -219,7 +224,7 @@ func (r *ChannelReconciler) HandleKick(nick string, channel string) {
 }
 
 func (r *ChannelReconciler) unsafeAddChannel(channel *IRCChannel) *channelState {
-	c := newChannelState(channel, r.client, r.delayerMaker)
+	c := newChannelState(channel, r.client, r.delayerMaker, r.timeTeller)
 
 	r.stopWg.Add(1)
 	go c.Monitor(r.stopCtx, &r.stopWg)

@@ -16,6 +16,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -128,6 +129,17 @@ func (s *testServer) handleConnection(conn net.Conn) {
 		}
 		bufConn.Flush()
 	}
+}
+
+func (s *testServer) SendMsg(msg string) error {
+	if s.Client == nil {
+		return errors.New("Cannot write without client connected")
+	}
+	bufConn := bufio.NewWriter(s.Client)
+	log.Printf("=Server= sending to client: %s", msg)
+	_, err := bufConn.WriteString(msg)
+	bufConn.Flush()
+	return err
 }
 
 func (s *testServer) SetCloseEarly(h closeEarlyHandler) {
