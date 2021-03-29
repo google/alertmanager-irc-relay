@@ -577,9 +577,6 @@ func TestStopRunningWhenHalfConnected(t *testing.T) {
 	cancel()
 	stopWg.Wait()
 
-	// Client has left, cleanup the server side before stopping
-	server.Client.Close()
-
 	server.Stop()
 
 	expectedCommands := []string{
