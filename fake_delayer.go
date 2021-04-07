@@ -16,8 +16,9 @@ package main
 
 import (
 	"context"
-	"log"
 	"time"
+
+	"github.com/google/alertmanager-irc-relay/logging"
 )
 
 type FakeDelayerMaker struct{}
@@ -39,11 +40,11 @@ func (f *FakeDelayer) Delay() {
 }
 
 func (f *FakeDelayer) DelayContext(ctx context.Context) bool {
-	log.Printf("Faking Backoff")
+	logging.Info("Faking Backoff")
 	if f.DelayOnChan {
-		log.Printf("Waiting StopDelay signal")
+		logging.Info("Waiting StopDelay signal")
 		<-f.StopDelay
-		log.Printf("Received StopDelay signal")
+		logging.Info("Received StopDelay signal")
 	}
 	return true
 }

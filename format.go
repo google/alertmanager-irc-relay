@@ -17,11 +17,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"log"
 	"net/url"
 	"strings"
 	"text/template"
 
+	"github.com/google/alertmanager-irc-relay/logging"
 	promtmpl "github.com/prometheus/alertmanager/template"
 )
 
@@ -56,9 +56,9 @@ func (f *Formatter) FormatMsg(ircChannel string, data interface{}) string {
 	if err := f.MsgTemplate.Execute(&output, data); err != nil {
 		msg_bytes, _ := json.Marshal(data)
 		msg = string(msg_bytes)
-		log.Printf("Could not apply msg template on alert (%s): %s",
+		logging.Error("Could not apply msg template on alert (%s): %s",
 			err, msg)
-		log.Printf("Sending raw alert")
+		logging.Warn("Sending raw alert")
 		alertHandlingErrors.WithLabelValues(ircChannel, "format_msg").Inc()
 	} else {
 		msg = output.String()

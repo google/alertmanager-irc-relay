@@ -16,11 +16,11 @@ package main
 
 import (
 	"context"
-	"log"
 	"sync"
 	"time"
 
 	irc "github.com/fluffle/goirc/client"
+	"github.com/google/alertmanager-irc-relay/logging"
 )
 
 const (
@@ -70,11 +70,11 @@ func (c *channelState) SetJoined() {
 	defer c.mu.Unlock()
 
 	if c.joined == true {
-		log.Printf("Not setting JOIN state on channel %s: already set", c.channel.Name)
+		logging.Warn("Not setting JOIN state on channel %s: already set", c.channel.Name)
 		return
 	}
 
-	log.Printf("Setting JOIN state on channel %s", c.channel.Name)
+	logging.Info("Setting JOIN state on channel %s", c.channel.Name)
 	c.joined = true
 	close(c.joinDone)
 }
@@ -84,11 +84,11 @@ func (c *channelState) UnsetJoined() {
 	defer c.mu.Unlock()
 
 	if c.joined == false {
-		log.Printf("Not removing JOIN state on channel %s: already not set", c.channel.Name)
+		logging.Warn("Not removing JOIN state on channel %s: already not set", c.channel.Name)
 		return
 	}
 
-	log.Printf("Removing JOIN state on channel %s", c.channel.Name)
+	logging.Info("Removing JOIN state on channel %s", c.channel.Name)
 	c.joined = false
 	c.joinDone = make(chan struct{})
 
@@ -100,30 +100,30 @@ func (c *channelState) UnsetJoined() {
 }
 
 func (c *channelState) join(ctx context.Context) {
-	log.Printf("Channel %s monitor: waiting to join", c.channel.Name)
+	logging.Info("Channel %s monitor: waiting to join", c.channel.Name)
 	if ok := c.delayer.DelayContext(ctx); !ok {
 		return
 	}
 
 	c.client.Join(c.channel.Name, c.channel.Password)
-	log.Printf("Channel %s monitor: join request sent", c.channel.Name)
+	logging.Info("Channel %s monitor: join request sent", c.channel.Name)
 
 	select {
 	case <-c.JoinDone():
-		log.Printf("Channel %s monitor: join succeeded", c.channel.Name)
+		logging.Info("Channel %s monitor: join succeeded", c.channel.Name)
 	case <-c.timeTeller.After(ircJoinWaitSecs * time.Second):
-		log.Printf("Channel %s monitor: could not join after %d seconds, will retry", c.channel.Name, ircJoinWaitSecs)
+		logging.Warn("Channel %s monitor: could not join after %d seconds, will retry", c.channel.Name, ircJoinWaitSecs)
 	case <-ctx.Done():
-		log.Printf("Channel %s monitor: context canceled while waiting for join", c.channel.Name)
+		logging.Info("Channel %s monitor: context canceled while waiting for join", c.channel.Name)
 	}
 }
 
 func (c *channelState) monitorJoinUnset(ctx context.Context) {
 	select {
 	case <-c.joinUnsetSignal:
-		log.Printf("Channel %s monitor: channel no longer joined", c.channel.Name)
+		logging.Info("Channel %s monitor: channel no longer joined", c.channel.Name)
 	case <-ctx.Done():
-		log.Printf("Channel %s monitor: context canceled while monitoring", c.channel.Name)
+		logging.Info("Channel %s monitor: context canceled while monitoring", c.channel.Name)
 	}
 }
 
@@ -195,11 +195,11 @@ func (r *ChannelReconciler) HandleJoin(nick string, channel string) {
 		// received join info for somebody else
 		return
 	}
-	log.Printf("Received JOIN confirmation for channel %s", channel)
+	logging.Info("Received JOIN confirmation for channel %s", channel)
 
 	c, ok := r.channels[channel]
 	if !ok {
-		log.Printf("Not processing JOIN for channel %s: unknown channel", channel)
+		logging.Warn("Not processing JOIN for channel %s: unknown channel", channel)
 		return
 	}
 	c.SetJoined()
@@ -213,11 +213,11 @@ func (r *ChannelReconciler) HandleKick(nick string, channel string) {
 		// received kick info for somebody else
 		return
 	}
-	log.Printf("Received KICK for channel %s", channel)
+	logging.Info("Received KICK for channel %s", channel)
 
 	c, ok := r.channels[channel]
 	if !ok {
-		log.Printf("Not processing KICK for channel %s: unknown channel", channel)
+		logging.Warn("Not processing KICK for channel %s: unknown channel", channel)
 		return
 	}
 	c.UnsetJoined()
@@ -239,7 +239,7 @@ func (r *ChannelReconciler) JoinChannel(channel string) (bool, <-chan struct{}) 
 
 	c, ok := r.channels[channel]
 	if !ok {
-		log.Printf("Request to JOIN new channel %s", channel)
+		logging.Info("Request to JOIN new channel %s", channel)
 		c = r.unsafeAddChannel(&IRCChannel{Name: channel})
 	}
 

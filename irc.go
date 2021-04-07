@@ -17,13 +17,13 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	irc "github.com/fluffle/goirc/client"
+	"github.com/google/alertmanager-irc-relay/logging"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -54,7 +54,7 @@ var (
 )
 
 func loggerHandler(_ *irc.Conn, line *irc.Line) {
-	log.Printf("Received: '%s'", line.Raw)
+	logging.Info("Received: '%s'", line.Raw)
 }
 
 func makeGOIRCConfig(config *Config) *irc.Config {
@@ -137,13 +137,13 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker Delaye
 func (n *IRCNotifier) registerHandlers() {
 	n.Client.HandleFunc(irc.CONNECTED,
 		func(*irc.Conn, *irc.Line) {
-			log.Printf("Session established")
+			logging.Info("Session established")
 			n.sessionUpSignal <- true
 		})
 
 	n.Client.HandleFunc(irc.DISCONNECTED,
 		func(*irc.Conn, *irc.Line) {
-			log.Printf("Disconnected from IRC")
+			logging.Info("Disconnected from IRC")
 			n.sessionDownSignal <- false
 		})
 
@@ -161,16 +161,16 @@ func (n *IRCNotifier) MaybeIdentifyNick() {
 	// so it should work here as well.
 	currentNick := n.Client.Me().Nick
 	if currentNick != n.Nick {
-		log.Printf("My nick is '%s', sending GHOST to NickServ to get '%s'",
+		logging.Info("My nick is '%s', sending GHOST to NickServ to get '%s'",
 			currentNick, n.Nick)
 		n.Client.Privmsgf("NickServ", "GHOST %s %s", n.Nick,
 			n.NickPassword)
 		time.Sleep(n.NickservDelayWait)
 
-		log.Printf("Changing nick to '%s'", n.Nick)
+		logging.Info("Changing nick to '%s'", n.Nick)
 		n.Client.Nick(n.Nick)
 	}
-	log.Printf("Sending IDENTIFY to NickServ")
+	logging.Info("Sending IDENTIFY to NickServ")
 	n.Client.Privmsgf("NickServ", "IDENTIFY %s", n.NickPassword)
 	time.Sleep(n.NickservDelayWait)
 }
@@ -186,22 +186,22 @@ func (n *IRCNotifier) ChannelJoined(ctx context.Context, channel string) bool {
 	case <-waitJoined:
 		return true
 	case <-n.timeTeller.After(ircJoinWaitSecs * time.Second):
-		log.Printf("Channel %s not joined after %d seconds, giving bad news to caller", channel, ircJoinWaitSecs)
+		logging.Warn("Channel %s not joined after %d seconds, giving bad news to caller", channel, ircJoinWaitSecs)
 		return false
 	case <-ctx.Done():
-		log.Printf("Context canceled while waiting for join on channel %s", channel)
+		logging.Info("Context canceled while waiting for join on channel %s", channel)
 		return false
 	}
 }
 
 func (n *IRCNotifier) SendAlertMsg(ctx context.Context, alertMsg *AlertMsg) {
 	if !n.sessionUp {
-		log.Printf("Cannot send alert to %s : IRC not connected", alertMsg.Channel)
+		logging.Error("Cannot send alert to %s : IRC not connected", alertMsg.Channel)
 		ircSendMsgErrors.WithLabelValues(alertMsg.Channel, "not_connected").Inc()
 		return
 	}
 	if !n.ChannelJoined(ctx, alertMsg.Channel) {
-		log.Printf("Cannot send alert to %s : cannot join channel", alertMsg.Channel)
+		logging.Error("Cannot send alert to %s : cannot join channel", alertMsg.Channel)
 		ircSendMsgErrors.WithLabelValues(alertMsg.Channel, "not_joined").Inc()
 		return
 	}
@@ -216,18 +216,18 @@ func (n *IRCNotifier) SendAlertMsg(ctx context.Context, alertMsg *AlertMsg) {
 
 func (n *IRCNotifier) ShutdownPhase() {
 	if n.sessionUp {
-		log.Printf("IRC client connected, quitting")
+		logging.Info("IRC client connected, quitting")
 		n.Client.Quit("see ya")
 
-		log.Printf("Wait for IRC disconnect to complete")
+		logging.Info("Wait for IRC disconnect to complete")
 		select {
 		case <-n.sessionDownSignal:
 		case <-n.timeTeller.After(n.Client.Config().Timeout):
-			log.Printf("Timeout while waiting for IRC disconnect to complete, stopping anyway")
+			logging.Warn("Timeout while waiting for IRC disconnect to complete, stopping anyway")
 		}
 		n.sessionWg.Done()
 	}
-	log.Printf("IRC shutdown complete")
+	logging.Info("IRC shutdown complete")
 }
 
 func (n *IRCNotifier) ConnectedPhase(ctx context.Context) {
@@ -241,21 +241,21 @@ func (n *IRCNotifier) ConnectedPhase(ctx context.Context) {
 		n.Client.Quit("see ya")
 		ircConnectedGauge.Set(0)
 	case <-ctx.Done():
-		log.Printf("IRC routine asked to terminate")
+		logging.Info("IRC routine asked to terminate")
 	}
 }
 
 func (n *IRCNotifier) SetupPhase(ctx context.Context) {
 	if !n.Client.Connected() {
-		log.Printf("Connecting to IRC %s", n.Client.Config().Server)
+		logging.Info("Connecting to IRC %s", n.Client.Config().Server)
 		if ok := n.BackoffCounter.DelayContext(ctx); !ok {
 			return
 		}
 		if err := n.Client.ConnectContext(WithWaitGroup(ctx, &n.sessionWg)); err != nil {
-			log.Printf("Could not connect to IRC: %s", err)
+			logging.Error("Could not connect to IRC: %s", err)
 			return
 		}
-		log.Printf("Connected to IRC server, waiting to establish session")
+		logging.Info("Connected to IRC server, waiting to establish session")
 	}
 	select {
 	case <-n.sessionUpSignal:
@@ -265,9 +265,9 @@ func (n *IRCNotifier) SetupPhase(ctx context.Context) {
 		n.channelReconciler.Start(ctx)
 		ircConnectedGauge.Set(1)
 	case <-n.sessionDownSignal:
-		log.Printf("Receiving a session down before the session is up, this is odd")
+		logging.Warn("Receiving a session down before the session is up, this is odd")
 	case <-ctx.Done():
-		log.Printf("IRC routine asked to terminate")
+		logging.Info("IRC routine asked to terminate")
 	}
 }
 

@@ -16,10 +16,11 @@ package main
 
 import (
 	"context"
-	"log"
 	"math"
 	"math/rand"
 	"time"
+
+	"github.com/google/alertmanager-irc-relay/logging"
 )
 
 type JitterFunc func(int) int
@@ -107,12 +108,12 @@ func (b *Backoff) Delay() {
 
 func (b *Backoff) DelayContext(ctx context.Context) bool {
 	delay := b.GetDelay()
-	log.Printf("Backoff for %s starts", delay)
+	logging.Info("Backoff for %s starts", delay)
 	select {
 	case <-b.timeTeller.After(delay):
-		log.Printf("Backoff for %s ends", delay)
+		logging.Info("Backoff for %s ends", delay)
 	case <-ctx.Done():
-		log.Printf("Backoff for %s canceled by context", delay)
+		logging.Info("Backoff for %s canceled by context", delay)
 		return false
 	}
 	return true

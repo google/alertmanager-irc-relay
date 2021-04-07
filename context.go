@@ -16,10 +16,11 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"sync"
+
+	"github.com/google/alertmanager-irc-relay/logging"
 )
 
 func WithSignal(ctx context.Context, s ...os.Signal) (context.Context, context.CancelFunc) {
@@ -29,7 +30,7 @@ func WithSignal(ctx context.Context, s ...os.Signal) (context.Context, context.C
 	go func() {
 		select {
 		case <-c:
-			log.Printf("Received %s, exiting", s)
+			logging.Info("Received %s, exiting", s)
 			cancel()
 		case <-ctx.Done():
 			cancel()

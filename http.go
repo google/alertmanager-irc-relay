@@ -18,11 +18,11 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/google/alertmanager-irc-relay/logging"
 	"github.com/gorilla/mux"
 	promtmpl "github.com/prometheus/alertmanager/template"
 	"github.com/prometheus/client_golang/prometheus"
@@ -86,19 +86,19 @@ func (s *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
 
 	body, err := ioutil.ReadAll(io.LimitReader(r.Body, 1024*1024*1024))
 	if err != nil {
-		log.Printf("Could not get body: %s", err)
+		logging.Error("Could not get body: %s", err)
 		alertHandlingErrors.WithLabelValues(ircChannel, "read_body").Inc()
 		return
 	}
 
 	var alertMessage = promtmpl.Data{}
 	if err := json.Unmarshal(body, &alertMessage); err != nil {
-		log.Printf("Could not decode request body (%s): %s", err, body)
+		logging.Error("Could not decode request body (%s): %s", err, body)
 		alertHandlingErrors.WithLabelValues(ircChannel, "decode_body").Inc()
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		w.WriteHeader(422) // Unprocessable entity
 		if err := json.NewEncoder(w).Encode(err); err != nil {
-			log.Printf("Could not write decoding error: %s", err)
+			logging.Error("Could not write decoding error: %s", err)
 			return
 		}
 		return
@@ -110,7 +110,7 @@ func (s *HTTPServer) RelayAlert(w http.ResponseWriter, r *http.Request) {
 		case s.AlertMsgs <- alertMsg:
 			handledAlerts.WithLabelValues(ircChannel).Inc()
 		default:
-			log.Printf("Could not send this alert to the IRC routine: %s",
+			logging.Error("Could not send this alert to the IRC routine: %s",
 				alertMsg)
 			alertHandlingErrors.WithLabelValues(ircChannel, "internal_comm_channel_full").Inc()
 		}
@@ -129,8 +129,8 @@ func (s *HTTPServer) Run() {
 
 	listenAddr := strings.Join(
 		[]string{s.Addr, strconv.Itoa(s.Port)}, ":")
-	log.Printf("Starting HTTP server")
+	logging.Info("Starting HTTP server")
 	if err := s.httpListener(listenAddr, router); err != nil {
-		log.Printf("Could not start http server: %s", err)
+		logging.Error("Could not start http server: %s", err)
 	}
 }

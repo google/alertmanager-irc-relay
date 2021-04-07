@@ -17,9 +17,10 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
 	"sync"
 	"syscall"
+
+	"github.com/google/alertmanager-irc-relay/logging"
 )
 
 func main() {
@@ -33,7 +34,7 @@ func main() {
 
 	config, err := LoadConfig(*configFile)
 	if err != nil {
-		log.Printf("Could not load config: %s", err)
+		logging.Error("Could not load config: %s", err)
 		return
 	}
 
@@ -42,14 +43,14 @@ func main() {
 	stopWg.Add(1)
 	ircNotifier, err := NewIRCNotifier(config, alertMsgs, &BackoffMaker{}, &RealTime{})
 	if err != nil {
-		log.Printf("Could not create IRC notifier: %s", err)
+		logging.Error("Could not create IRC notifier: %s", err)
 		return
 	}
 	go ircNotifier.Run(ctx, &stopWg)
 
 	httpServer, err := NewHTTPServer(config, alertMsgs)
 	if err != nil {
-		log.Printf("Could not create HTTP server: %s", err)
+		logging.Error("Could not create HTTP server: %s", err)
 		return
 	}
 	go httpServer.Run()

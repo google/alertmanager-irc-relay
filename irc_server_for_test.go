@@ -19,13 +19,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"strings"
 	"sync"
 	"testing"
 
 	irc "github.com/fluffle/goirc/client"
+	"github.com/google/alertmanager-irc-relay/logging"
 )
 
 type LineHandlerFunc func(*bufio.ReadWriter, *irc.Line) error
@@ -93,7 +93,7 @@ func (s *testServer) handleLine(conn *bufio.ReadWriter, line *irc.Line) error {
 	s.Log = append(s.Log, strings.Trim(line.Raw, " \r\n"))
 	handler := s.getHandler(line.Cmd)
 	if handler == nil {
-		log.Printf("=Server= No handler for command '%s', skipping", line.Cmd)
+		logging.Info("=Server= No handler for command '%s', skipping", line.Cmd)
 		return nil
 	}
 	return handler(conn, line)
@@ -110,21 +110,21 @@ func (s *testServer) handleConnection(conn net.Conn) {
 		msg, err := bufConn.ReadBytes('\n')
 		if err != nil {
 			if err == io.EOF {
-				log.Printf("=Server= Client %s disconnected", conn.RemoteAddr().String())
+				logging.Info("=Server= Client %s disconnected", conn.RemoteAddr().String())
 			} else {
-				log.Printf("=Server= Could not read from %s: %s", conn.RemoteAddr().String(), err)
+				logging.Info("=Server= Could not read from %s: %s", conn.RemoteAddr().String(), err)
 			}
 			return
 		}
-		log.Printf("=Server= Received %s", msg)
+		logging.Info("=Server= Received %s", msg)
 		line := irc.ParseLine(string(msg))
 		if line == nil {
-			log.Printf("=Server= Could not parse received line")
+			logging.Error("=Server= Could not parse received line")
 			continue
 		}
 		err = s.handleLine(bufConn, line)
 		if err != nil {
-			log.Printf("=Server= Closing connection: %s", err)
+			logging.Info("=Server= Closing connection: %s", err)
 			return
 		}
 		bufConn.Flush()
@@ -136,7 +136,7 @@ func (s *testServer) SendMsg(msg string) error {
 		return errors.New("Cannot write without client connected")
 	}
 	bufConn := bufio.NewWriter(s.Client)
-	log.Printf("=Server= sending to client: %s", msg)
+	logging.Info("=Server= sending to client: %s", msg)
 	_, err := bufConn.WriteString(msg)
 	bufConn.Flush()
 	return err
@@ -154,7 +154,7 @@ func (s *testServer) handleCloseEarly(conn net.Conn) bool {
 	if s.closeEarlyHandler == nil {
 		return false
 	}
-	log.Printf("=Server= Closing connection early")
+	logging.Info("=Server= Closing connection early")
 	conn.Close()
 	s.closeEarlyHandler()
 	return true
@@ -165,10 +165,10 @@ func (s *testServer) Serve() {
 	for {
 		conn, err := s.Listener.Accept()
 		if err != nil {
-			log.Printf("=Server= Stopped accepting new connections")
+			logging.Info("=Server= Stopped accepting new connections")
 			return
 		}
-		log.Printf("=Server= New client connected from %s", conn.RemoteAddr().String())
+		logging.Info("=Server= New client connected from %s", conn.RemoteAddr().String())
 		if s.handleCloseEarly(conn) {
 			continue
 		}
@@ -198,7 +198,7 @@ func makeTestServer(t *testing.T) (*testServer, int) {
 		t.Fatalf("=Server= Could not create listener: %s", err)
 	}
 	addr = listener.Addr().(*net.TCPAddr)
-	log.Printf("=Server= Test server listening on %s", addr.String())
+	logging.Info("=Server= Test server listening on %s", addr.String())
 
 	server.Listener = listener
 

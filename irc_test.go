@@ -18,7 +18,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"log"
 	"reflect"
 	"strings"
 	"sync"
@@ -26,6 +25,7 @@ import (
 	"time"
 
 	irc "github.com/fluffle/goirc/client"
+	"github.com/google/alertmanager-irc-relay/logging"
 )
 
 func makeTestIRCConfig(IRCPort int) *Config {
@@ -281,9 +281,9 @@ func TestSendAlertDisconnected(t *testing.T) {
 	testStep.Add(1)
 	holdUserStep.Add(1)
 	holdUser := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		log.Printf("=Server= Wait before completing session")
+		logging.Info("=Server= Wait before completing session")
 		testStep.Wait()
-		log.Printf("=Server= Completing session")
+		logging.Info("=Server= Completing session")
 		holdUserStep.Done()
 		return hUSER(conn, line)
 	}
@@ -564,7 +564,7 @@ func TestStopRunningWhenHalfConnected(t *testing.T) {
 	// session is not up
 	testStep.Add(1)
 	holdUser := func(conn *bufio.ReadWriter, line *irc.Line) error {
-		log.Printf("=Server= NOT completing session")
+		logging.Info("=Server= NOT completing session")
 		testStep.Done()
 		return nil
 	}
