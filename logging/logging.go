@@ -23,6 +23,10 @@ import (
 	goirc_logging "github.com/fluffle/goirc/logging"
 )
 
+const (
+	loggingCallDepth = 3
+)
+
 type Logger interface {
 	Debug(format string, args ...interface{})
 	Info(format string, args ...interface{})
@@ -40,20 +44,20 @@ var debugFlag = flag.Bool("debug", false, "Enable debug logging.")
 
 func (l stdOutLogger) Debug(f string, a ...interface{}) {
 	if *debugFlag {
-		l.out.Output(3, fmt.Sprintf("DEBUG "+f, a...))
+		l.out.Output(loggingCallDepth, fmt.Sprintf("DEBUG "+f, a...))
 	}
 }
 
 func (l stdOutLogger) Info(f string, a ...interface{}) {
-	l.out.Output(3, fmt.Sprintf("INFO "+f, a...))
+	l.out.Output(loggingCallDepth, fmt.Sprintf("INFO "+f, a...))
 }
 
 func (l stdOutLogger) Warn(f string, a ...interface{}) {
-	l.out.Output(3, fmt.Sprintf("WARN "+f, a...))
+	l.out.Output(loggingCallDepth, fmt.Sprintf("WARN "+f, a...))
 }
 
 func (l stdOutLogger) Error(f string, a ...interface{}) {
-	l.out.Output(3, fmt.Sprintf("ERROR "+f, a...))
+	l.out.Output(loggingCallDepth, fmt.Sprintf("ERROR "+f, a...))
 }
 
 func init() {
