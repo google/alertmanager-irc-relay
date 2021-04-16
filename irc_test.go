@@ -88,12 +88,13 @@ func TestServerPassword(t *testing.T) {
 		"PASS hostsecret",
 		"NICK foo",
 		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		"QUIT :see ya",
 	}
 
 	if !reflect.DeepEqual(expectedCommands, server.Log) {
-		t.Error("Did not send IRC server password")
+		t.Error("Did not send IRC server password. Received commands:\n", strings.Join(server.Log, "\n"))
 	}
 }
 
@@ -143,6 +144,7 @@ func TestSendAlertOnPreJoinedChannel(t *testing.T) {
 	expectedCommands := []string{
 		"NICK foo",
 		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		"NOTICE #foo :test message",
 		"QUIT :see ya",
@@ -200,6 +202,7 @@ func TestUsePrivmsgToSendAlertOnPreJoinedChannel(t *testing.T) {
 	expectedCommands := []string{
 		"NICK foo",
 		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		"PRIVMSG #foo :test message",
 		"QUIT :see ya",
@@ -254,8 +257,10 @@ func TestSendAlertAndJoinChannel(t *testing.T) {
 	expectedCommands := []string{
 		"NICK foo",
 		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		// #foobar joined before sending message
+		"PRIVMSG ChanServ :UNBAN #foobar",
 		"JOIN #foobar",
 		"NOTICE #foobar :test message",
 		"QUIT :see ya",
@@ -332,6 +337,7 @@ func TestSendAlertDisconnected(t *testing.T) {
 	expectedCommands := []string{
 		"NICK foo",
 		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		// Only message sent while being connected is received.
 		"NOTICE #foo :connected test message",
@@ -378,10 +384,12 @@ func TestReconnect(t *testing.T) {
 		// Commands from first connection
 		"NICK foo",
 		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		// Commands from reconnection
 		"NICK foo",
 		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		"QUIT :see ya",
 	}
@@ -441,6 +449,7 @@ func TestConnectErrorRetry(t *testing.T) {
 	expectedCommands := []string{
 		"NICK foo",
 		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		"QUIT :see ya",
 	}
@@ -481,6 +490,7 @@ func TestIdentify(t *testing.T) {
 		"NICK foo",
 		"USER foo 12 * :",
 		"PRIVMSG NickServ :IDENTIFY nickpassword",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		"QUIT :see ya",
 	}
@@ -544,6 +554,7 @@ func TestGhostAndIdentify(t *testing.T) {
 		"PRIVMSG NickServ :GHOST foo nickpassword",
 		"NICK foo",
 		"PRIVMSG NickServ :IDENTIFY nickpassword",
+		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		"QUIT :see ya",
 	}

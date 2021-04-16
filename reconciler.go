@@ -105,6 +105,9 @@ func (c *channelState) join(ctx context.Context) {
 		return
 	}
 
+	// Try to unban ourselves, just in case
+	c.client.Privmsgf("ChanServ", "UNBAN %s", c.channel.Name)
+
 	c.client.Join(c.channel.Name, c.channel.Password)
 	logging.Info("Channel %s monitor: join request sent", c.channel.Name)
 
