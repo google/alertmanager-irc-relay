@@ -81,8 +81,11 @@ type IRCNotifier struct {
 	// might change its copy.
 	Nick         string
 	NickPassword string
-	Client       *irc.Conn
-	AlertMsgs    chan AlertMsg
+
+	NickservIdentifyPatterns []string
+
+	Client    *irc.Conn
+	AlertMsgs chan AlertMsg
 
 	// irc.Conn has a Connected() method that can tell us wether the TCP
 	// connection is up, and thus if we should trigger connect/disconnect.
@@ -116,17 +119,18 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker Delaye
 	channelReconciler := NewChannelReconciler(config, client, delayerMaker, timeTeller)
 
 	notifier := &IRCNotifier{
-		Nick:              config.IRCNick,
-		NickPassword:      config.IRCNickPass,
-		Client:            client,
-		AlertMsgs:         alertMsgs,
-		sessionUpSignal:   make(chan bool),
-		sessionDownSignal: make(chan bool),
-		channelReconciler: channelReconciler,
-		UsePrivmsg:        config.UsePrivmsg,
-		NickservDelayWait: nickservWaitSecs * time.Second,
-		BackoffCounter:    backoffCounter,
-		timeTeller:        timeTeller,
+		Nick:                     config.IRCNick,
+		NickPassword:             config.IRCNickPass,
+		NickservIdentifyPatterns: config.NickservIdentifyPatterns,
+		Client:                   client,
+		AlertMsgs:                alertMsgs,
+		sessionUpSignal:          make(chan bool),
+		sessionDownSignal:        make(chan bool),
+		channelReconciler:        channelReconciler,
+		UsePrivmsg:               config.UsePrivmsg,
+		NickservDelayWait:        nickservWaitSecs * time.Second,
+		BackoffCounter:           backoffCounter,
+		timeTeller:               timeTeller,
 	}
 
 	notifier.registerHandlers()
@@ -147,18 +151,53 @@ func (n *IRCNotifier) registerHandlers() {
 			n.sessionDownSignal <- false
 		})
 
-	for _, event := range []string{irc.NOTICE, "433"} {
+	n.Client.HandleFunc(irc.NOTICE,
+		func(_ *irc.Conn, line *irc.Line) {
+			n.HandleNotice(line.Nick, line.Text())
+		})
+
+	for _, event := range []string{"433"} {
 		n.Client.HandleFunc(event, loggerHandler)
 	}
 }
 
-func (n *IRCNotifier) MaybeIdentifyNick() {
+func (n *IRCNotifier) HandleNotice(nick string, msg string) {
+	logging.Info("Received NOTICE from %s: %s", nick, msg)
+	if strings.ToLower(nick) == "nickserv" {
+		n.HandleNickservMsg(msg)
+	}
+}
+
+func (n *IRCNotifier) HandleNickservMsg(msg string) {
 	if n.NickPassword == "" {
+		logging.Debug("Skip processing NickServ request, no password configured")
 		return
 	}
 
-	// Very lazy/optimistic, but this is good enough for my irssi config,
-	// so it should work here as well.
+	// Remove most common formatting options from NickServ messages
+	cleaner := strings.NewReplacer(
+		"\001", "", // bold
+		"\002", "", // faint
+		"\004", "", // underline
+	)
+	cleanedMsg := cleaner.Replace(msg)
+
+	for _, identifyPattern := range n.NickservIdentifyPatterns {
+		logging.Debug("Checking if NickServ message matches identify request '%s'", identifyPattern)
+		if strings.Contains(cleanedMsg, identifyPattern) {
+			logging.Info("Handling NickServ request to IDENTIFY")
+			n.Client.Privmsgf("NickServ", "IDENTIFY %s", n.NickPassword)
+			return
+		}
+	}
+}
+
+func (n *IRCNotifier) MaybeGhostNick() {
+	if n.NickPassword == "" {
+		logging.Debug("Skip GHOST check, no password configured")
+		return
+	}
+
 	currentNick := n.Client.Me().Nick
 	if currentNick != n.Nick {
 		logging.Info("My nick is '%s', sending GHOST to NickServ to get '%s'",
@@ -169,9 +208,19 @@ func (n *IRCNotifier) MaybeIdentifyNick() {
 
 		logging.Info("Changing nick to '%s'", n.Nick)
 		n.Client.Nick(n.Nick)
+		time.Sleep(n.NickservDelayWait)
 	}
-	logging.Info("Sending IDENTIFY to NickServ")
-	n.Client.Privmsgf("NickServ", "IDENTIFY %s", n.NickPassword)
+}
+
+func (n *IRCNotifier) MaybeWaitForNickserv() {
+	if n.NickPassword == "" {
+		logging.Debug("Skip NickServ wait, no password configured")
+		return
+	}
+
+	// Very lazy/optimistic, but this is good enough for my irssi config,
+	// so it should work here as well.
+	logging.Info("Waiting for NickServ to notice us and issue an identify request")
 	time.Sleep(n.NickservDelayWait)
 }
 
@@ -261,7 +310,8 @@ func (n *IRCNotifier) SetupPhase(ctx context.Context) {
 	case <-n.sessionUpSignal:
 		n.sessionUp = true
 		n.sessionWg.Add(1)
-		n.MaybeIdentifyNick()
+		n.MaybeGhostNick()
+		n.MaybeWaitForNickserv()
 		n.channelReconciler.Start(ctx)
 		ircConnectedGauge.Set(1)
 	case <-n.sessionDownSignal:

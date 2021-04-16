@@ -66,6 +66,15 @@ msg_template: "Alert {{ .Labels.alertname }} on {{ .Labels.instance }} is {{ .St
 
 # Set the internal buffer size for alerts received but not yet sent to IRC.
 alert_buffer_size: 2048
+
+# Patterns used to guess whether NickServ is asking us to IDENTIFY
+# Note: If you need to change this because the bot is not catching a request
+# from a rather common NickServ, please consider sending a PR to update the
+# default config instead.
+nickserv_identify_patterns:
+  - "identify via /msg NickServ identify <password>"
+  - "type /msg NickServ IDENTIFY password"
+  - "authenticate yourself to services with the IDENTIFY command"
 ```
 
 Running the bot (assuming *$GOPATH* and *$PATH* are properly setup for go):

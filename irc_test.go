@@ -39,6 +39,9 @@ func makeTestIRCConfig(IRCPort int) *Config {
 			IRCChannel{Name: "#foo"},
 		},
 		UsePrivmsg: false,
+		NickservIdentifyPatterns: []string{
+			"identify yourself ktnxbye",
+		},
 	}
 }
 
@@ -468,6 +471,15 @@ func TestIdentify(t *testing.T) {
 
 	var testStep sync.WaitGroup
 
+	// Trigger NickServ identify request when we see the NICK command
+	// Note: We also test formatting cleanup with this message
+	nickHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		var err error
+		_, err = conn.WriteString(":NickServ!NickServ@services. NOTICE airtest :This nickname is registered. Please choose a different nickname, or \002identify yourself\002 ktnxbye.\n")
+		return err
+	}
+	server.SetHandler("NICK", nickHandler)
+
 	// Wait until the pre-joined channel is seen (joining happens
 	// after identification).
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
@@ -500,7 +512,7 @@ func TestIdentify(t *testing.T) {
 	}
 }
 
-func TestGhostAndIdentify(t *testing.T) {
+func TestGhost(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
 	config.IRCNickPass = "nickpassword"
@@ -530,7 +542,7 @@ func TestGhostAndIdentify(t *testing.T) {
 	server.SetHandler("NICK", nickHandler)
 
 	// Wait until the pre-joined channel is seen (joining happens
-	// after identification).
+	// after ghosting).
 	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
 		testStep.Done()
 		return hJOIN(conn, line)
@@ -553,7 +565,6 @@ func TestGhostAndIdentify(t *testing.T) {
 		"NICK foo^",
 		"PRIVMSG NickServ :GHOST foo nickpassword",
 		"NICK foo",
-		"PRIVMSG NickServ :IDENTIFY nickpassword",
 		"PRIVMSG ChanServ :UNBAN #foo",
 		"JOIN #foo",
 		"QUIT :see ya",
