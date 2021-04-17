@@ -179,6 +179,7 @@ func (n *IRCNotifier) HandleNickservMsg(msg string) {
 		"\001", "", // bold
 		"\002", "", // faint
 		"\004", "", // underline
+		"\037", "", // underline
 	)
 	cleanedMsg := cleaner.Replace(msg)
 
