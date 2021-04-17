@@ -18,6 +18,8 @@ import (
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"os"
+
+	"github.com/google/alertmanager-irc-relay/logging"
 )
 
 const (
@@ -47,7 +49,7 @@ type Config struct {
 	UsePrivmsg      bool         `yaml:"use_privmsg"`
 	AlertBufferSize int          `yaml:"alert_buffer_size"`
 
-	NickservIdentifyPatterns []string `yaml:nickserv_identify_patterns`
+	NickservIdentifyPatterns []string `yaml:"nickserv_identify_patterns"`
 }
 
 func LoadConfig(configFile string) (*Config, error) {
@@ -92,6 +94,9 @@ func LoadConfig(configFile string) (*Config, error) {
 			config.MsgTemplate = defaultMsgTemplate
 		}
 	}
+
+	loadedConfig, _ := yaml.Marshal(config)
+	logging.Debug("Loaded config:\n%s", loadedConfig)
 
 	return config, nil
 }
