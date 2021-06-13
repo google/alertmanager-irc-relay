@@ -69,6 +69,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		UsePrivmsg:      false,
 		AlertBufferSize: 2048,
 		NickservIdentifyPatterns: []string{
+			"Please choose a different nickname, or identify via",
 			"identify via /msg NickServ identify <password>",
 			"type /msg NickServ IDENTIFY password",
 			"authenticate yourself to services with the IDENTIFY command",
