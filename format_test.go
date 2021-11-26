@@ -109,3 +109,27 @@ func TestUrlFunctions(t *testing.T) {
 
 	CreateFormatterAndCheckOutput(t, &testingConfig, expectedAlertMsgs)
 }
+
+func TestMultilineTemplates(t *testing.T) {
+	testingConfig := Config{
+		MsgTemplate: "Alert {{ .GroupLabels.alertname }}\nis\r{{ .Status }}",
+		MsgOnce:     true,
+	}
+
+	expectedAlertMsgs := []AlertMsg{
+		AlertMsg{
+			Channel: "#somechannel",
+			Alert:   "Alert airDown",
+		},
+		AlertMsg{
+			Channel: "#somechannel",
+			Alert:   "is",
+		},
+		AlertMsg{
+			Channel: "#somechannel",
+			Alert:   "resolved",
+		},
+	}
+
+	CreateFormatterAndCheckOutput(t, &testingConfig, expectedAlertMsgs)
+}

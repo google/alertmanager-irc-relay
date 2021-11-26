@@ -50,7 +50,7 @@ func NewFormatter(config *Config) (*Formatter, error) {
 	}, nil
 }
 
-func (f *Formatter) FormatMsg(ircChannel string, data interface{}) string {
+func (f *Formatter) FormatMsg(ircChannel string, data interface{}) []string {
 	output := bytes.Buffer{}
 	var msg string
 	if err := f.MsgTemplate.Execute(&output, data); err != nil {
@@ -63,21 +63,28 @@ func (f *Formatter) FormatMsg(ircChannel string, data interface{}) string {
 	} else {
 		msg = output.String()
 	}
-	return msg
+
+	// Do not send to IRC messages with newlines, split in multiple messages instead.
+	newLinesSplit := func(r rune) bool {
+		return r == '\n' || r == '\r'
+	}
+	return strings.FieldsFunc(msg, newLinesSplit)
 }
 
 func (f *Formatter) GetMsgsFromAlertMessage(ircChannel string,
 	data *promtmpl.Data) []AlertMsg {
 	msgs := []AlertMsg{}
 	if f.MsgOnce {
-		msg := f.FormatMsg(ircChannel, data)
-		msgs = append(msgs,
-			AlertMsg{Channel: ircChannel, Alert: msg})
-	} else {
-		for _, alert := range data.Alerts {
-			msg := f.FormatMsg(ircChannel, alert)
+		for _, msg := range f.FormatMsg(ircChannel, data) {
 			msgs = append(msgs,
 				AlertMsg{Channel: ircChannel, Alert: msg})
+		}
+	} else {
+		for _, alert := range data.Alerts {
+			for _, msg := range f.FormatMsg(ircChannel, alert) {
+				msgs = append(msgs,
+					AlertMsg{Channel: ircChannel, Alert: msg})
+			}
 		}
 	}
 	return msgs
