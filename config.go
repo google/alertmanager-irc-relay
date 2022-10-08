@@ -49,7 +49,9 @@ type Config struct {
 	UsePrivmsg      bool         `yaml:"use_privmsg"`
 	AlertBufferSize int          `yaml:"alert_buffer_size"`
 
+	NickservName    string       `yaml:"nickserv_name"`
 	NickservIdentifyPatterns []string `yaml:"nickserv_identify_patterns"`
+	ChanservName    string       `yaml:"chanserv_name"`
 }
 
 func LoadConfig(configFile string) (*Config, error) {
@@ -68,12 +70,14 @@ func LoadConfig(configFile string) (*Config, error) {
 		MsgOnce:         false,
 		UsePrivmsg:      false,
 		AlertBufferSize: 2048,
+		NickservName:    "NickServ",
 		NickservIdentifyPatterns: []string{
 			"Please choose a different nickname, or identify via",
 			"identify via /msg NickServ identify <password>",
 			"type /msg NickServ IDENTIFY password",
 			"authenticate yourself to services with the IDENTIFY command",
 		},
+		ChanservName:    "ChanServ",
 	}
 
 	if configFile != "" {

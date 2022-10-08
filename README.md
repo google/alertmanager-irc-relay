@@ -23,6 +23,7 @@ http_port: 8000
 # Connect to this IRC host/port.
 #
 # Note: SSL is enabled by default, use "irc_use_ssl: no" to disable.
+# Set "irc_verify_ssl: no" to accept invalid SSL certificates (not recommended)
 irc_host: irc.example.com
 irc_port: 7000
 # Optionally set the server password
@@ -75,6 +76,11 @@ nickserv_identify_patterns:
   - "identify via /msg NickServ identify <password>"
   - "type /msg NickServ IDENTIFY password"
   - "authenticate yourself to services with the IDENTIFY command"
+
+# Rarely NickServ or ChanServ is reached at a specific hostname.  Specify an
+# override here
+nickserv_name: NickServ
+chanserv_name: ChanServ
 ```
 
 Running the bot (assuming *$GOPATH* and *$PATH* are properly setup for go):
