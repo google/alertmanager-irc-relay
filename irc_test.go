@@ -404,6 +404,68 @@ func TestReconnect(t *testing.T) {
 	}
 }
 
+func TestReconnectNickIdentChange(t *testing.T) {
+	server, port := makeTestServer(t)
+	config := makeTestIRCConfig(port)
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
+
+	var testStep sync.WaitGroup
+
+	userHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		testStep.Done()
+		r := fmt.Sprintf(":example.com 001 %s :Welcome to the Internet Relay Network %s!~%s@example.com\n",
+			line.Args[0], line.Args[0], line.Args[0])
+		_, err := conn.WriteString(r)
+		return err
+	}
+	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		testStep.Done()
+		return hJOIN(conn, line)
+	}
+	server.SetHandler("USER", userHandler)
+	server.SetHandler("JOIN", joinHandler)
+
+	testStep.Add(2)
+	go notifier.Run(ctx, stopWg)
+
+	// Wait until the pre-joined channel is seen.
+	testStep.Wait()
+
+	if ident := notifier.IrcConfig.Me.Ident; ident != "~foo" {
+		t.Errorf("IRC client failed to learn new nick ident. Using %s", ident)
+	}
+
+	// Simulate disconnection.
+	testStep.Add(2)
+	server.Client.Close()
+
+	// Wait again until the pre-joined channel is seen.
+	testStep.Wait()
+
+	cancel()
+	stopWg.Wait()
+
+	server.Stop()
+
+	expectedCommands := []string{
+		// Commands from first connection
+		"NICK foo",
+		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
+		"JOIN #foo",
+		// Commands from reconnection
+		"NICK foo",
+		"USER foo 12 * :", // NOTE: the client didn't used ~foo as its ident
+		"PRIVMSG ChanServ :UNBAN #foo",
+		"JOIN #foo",
+		"QUIT :see ya",
+	}
+
+	if !reflect.DeepEqual(expectedCommands, server.Log) {
+		t.Error("Reconnection did not happen correctly. Received commands:\n", strings.Join(server.Log, "\n"))
+	}
+}
+
 func TestConnectErrorRetry(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)

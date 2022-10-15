@@ -85,6 +85,12 @@ type IRCNotifier struct {
 	NickservName string
 	NickservIdentifyPatterns []string
 
+	// As the goirc library might alter the irc.Config created by makeGOIRCConfig,
+	// we might also want to keep a reference to the original Config to restore
+	// the desired state.
+	Config    *Config
+	IrcConfig *irc.Config
+
 	Client    *irc.Conn
 	AlertMsgs chan AlertMsg
 
@@ -124,6 +130,8 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker Delaye
 		NickPassword:             config.IRCNickPass,
 		NickservName:             config.NickservName,
 		NickservIdentifyPatterns: config.NickservIdentifyPatterns,
+		Config:                   config,
+		IrcConfig:                ircConfig,
 		Client:                   client,
 		AlertMsgs:                alertMsgs,
 		sessionUpSignal:          make(chan bool),
@@ -299,6 +307,11 @@ func (n *IRCNotifier) ConnectedPhase(ctx context.Context) {
 
 func (n *IRCNotifier) SetupPhase(ctx context.Context) {
 	if !n.Client.Connected() {
+		if n.IrcConfig.Me.Ident != n.Config.IRCNick {
+			logging.Debug("Restoring IRC nick from %s to %s", n.IrcConfig.Me.Ident, n.Config.IRCNick)
+			n.IrcConfig.Me.Ident = n.Config.IRCNick
+		}
+
 		logging.Info("Connecting to IRC %s", n.Client.Config().Server)
 		if ok := n.BackoffCounter.DelayContext(ctx); !ok {
 			return
