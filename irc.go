@@ -29,7 +29,6 @@ import (
 )
 
 const (
-	pingFrequencySecs          = 60
 	connectionTimeoutSecs      = 30
 	nickservWaitSecs           = 10
 	ircConnectMaxBackoffSecs   = 300
@@ -69,7 +68,7 @@ func makeGOIRCConfig(config *Config) *irc.Config {
 		ServerName:         config.IRCHost,
 		InsecureSkipVerify: !config.IRCVerifySSL,
 	}
-	ircConfig.PingFreq = pingFrequencySecs * time.Second
+	ircConfig.PingFreq = time.Duration(config.IRCPingSecs) * time.Second
 	ircConfig.Timeout = connectionTimeoutSecs * time.Second
 	ircConfig.NewNick = func(n string) string { return n + "^" }
 
@@ -102,6 +101,9 @@ type IRCNotifier struct {
 	sessionUp         bool
 	sessionUpSignal   chan bool
 	sessionDownSignal chan bool
+	sessionPongSignal chan bool
+	sessionPingOnce   sync.Once
+	sessionLastPong   time.Time
 	sessionWg         sync.WaitGroup
 
 	channelReconciler *ChannelReconciler
@@ -136,6 +138,7 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker Delaye
 		AlertMsgs:                alertMsgs,
 		sessionUpSignal:          make(chan bool),
 		sessionDownSignal:        make(chan bool),
+		sessionPongSignal:        make(chan bool),
 		channelReconciler:        channelReconciler,
 		UsePrivmsg:               config.UsePrivmsg,
 		NickservDelayWait:        nickservWaitSecs * time.Second,
@@ -164,6 +167,11 @@ func (n *IRCNotifier) registerHandlers() {
 	n.Client.HandleFunc(irc.NOTICE,
 		func(_ *irc.Conn, line *irc.Line) {
 			n.HandleNotice(line.Nick, line.Text())
+		})
+
+	n.Client.HandleFunc(irc.PONG,
+		func(_ *irc.Conn, line *irc.Line) {
+			n.sessionPongSignal <- true
 		})
 
 	for _, event := range []string{"433"} {
@@ -282,6 +290,7 @@ func (n *IRCNotifier) ShutdownPhase() {
 		logging.Info("Wait for IRC disconnect to complete")
 		select {
 		case <-n.sessionDownSignal:
+		case <-n.sessionPongSignal:
 		case <-n.timeTeller.After(n.Client.Config().Timeout):
 			logging.Warn("Timeout while waiting for IRC disconnect to complete, stopping anyway")
 		}
@@ -294,6 +303,23 @@ func (n *IRCNotifier) ConnectedPhase(ctx context.Context) {
 	select {
 	case alertMsg := <-n.AlertMsgs:
 		n.SendAlertMsg(ctx, &alertMsg)
+	case <-n.sessionPongSignal:
+		logging.Debug("Received a PONG message; prev PONG was at %v", n.sessionLastPong)
+		n.sessionLastPong = time.Now()
+	case <-time.After(2*n.IrcConfig.PingFreq - time.Since(n.sessionLastPong)):
+		// Calling n.Client.Close() will trigger n.sessionDownSignal. However, as
+		// this also dispatches a hook, which we will catch as sessionDownSignal,
+		// this needs to be done in a concurrent fashion if we don't want to
+		// deadlock ourself.
+		//
+		// Furthermore, as this time.After(...) interval is now zero, it will also
+		// trigger when visiting this select the next time. To mitigate multiple
+		// Close() calls, it is wrapped within an sync.Once which will be reset
+		// during SetupPhase's sessionUpSignal.
+		n.sessionPingOnce.Do(func() {
+			logging.Error("Haven't received a PONG after twice the PING period")
+			go n.Client.Close()
+		})
 	case <-n.sessionDownSignal:
 		n.sessionUp = false
 		n.sessionWg.Done()
@@ -325,6 +351,8 @@ func (n *IRCNotifier) SetupPhase(ctx context.Context) {
 	select {
 	case <-n.sessionUpSignal:
 		n.sessionUp = true
+		n.sessionPingOnce = sync.Once{}
+		n.sessionLastPong = time.Now()
 		n.sessionWg.Add(1)
 		n.MaybeGhostNick()
 		n.MaybeWaitForNickserv()
@@ -332,6 +360,8 @@ func (n *IRCNotifier) SetupPhase(ctx context.Context) {
 		ircConnectedGauge.Set(1)
 	case <-n.sessionDownSignal:
 		logging.Warn("Receiving a session down before the session is up, this is odd")
+	case <-n.sessionPongSignal:
+		logging.Warn("Receiving a PONG before the session is up, this is odd")
 	case <-ctx.Done():
 		logging.Info("IRC routine asked to terminate")
 	}
