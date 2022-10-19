@@ -42,6 +42,8 @@ func makeTestIRCConfig(IRCPort int) *Config {
 		NickservIdentifyPatterns: []string{
 			"identify yourself ktnxbye",
 		},
+		NickservName:    "NickServ",
+		ChanservName:    "ChanServ",
 	}
 }
 
