@@ -82,6 +82,7 @@ type IRCNotifier struct {
 	Nick         string
 	NickPassword string
 
+	NickservName string
 	NickservIdentifyPatterns []string
 
 	Client    *irc.Conn
@@ -121,6 +122,7 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker Delaye
 	notifier := &IRCNotifier{
 		Nick:                     config.IRCNick,
 		NickPassword:             config.IRCNickPass,
+		NickservName:             config.NickservName,
 		NickservIdentifyPatterns: config.NickservIdentifyPatterns,
 		Client:                   client,
 		AlertMsgs:                alertMsgs,
@@ -187,7 +189,7 @@ func (n *IRCNotifier) HandleNickservMsg(msg string) {
 		logging.Debug("Checking if NickServ message matches identify request '%s'", identifyPattern)
 		if strings.Contains(cleanedMsg, identifyPattern) {
 			logging.Info("Handling NickServ request to IDENTIFY")
-			n.Client.Privmsgf("NickServ", "IDENTIFY %s", n.NickPassword)
+			n.Client.Privmsgf(n.NickservName, "IDENTIFY %s", n.NickPassword)
 			return
 		}
 	}
@@ -203,7 +205,7 @@ func (n *IRCNotifier) MaybeGhostNick() {
 	if currentNick != n.Nick {
 		logging.Info("My nick is '%s', sending GHOST to NickServ to get '%s'",
 			currentNick, n.Nick)
-		n.Client.Privmsgf("NickServ", "GHOST %s %s", n.Nick,
+		n.Client.Privmsgf(n.NickservName, "GHOST %s %s", n.Nick,
 			n.NickPassword)
 		time.Sleep(n.NickservDelayWait)
 

@@ -31,6 +31,7 @@ const (
 
 type channelState struct {
 	channel IRCChannel
+	chanservName string
 	client  *irc.Conn
 
 	delayer    Delayer
@@ -44,7 +45,7 @@ type channelState struct {
 	mu sync.Mutex
 }
 
-func newChannelState(channel *IRCChannel, client *irc.Conn, delayerMaker DelayerMaker, timeTeller TimeTeller) *channelState {
+func newChannelState(channel *IRCChannel, client *irc.Conn, delayerMaker DelayerMaker, timeTeller TimeTeller, chanservName string) *channelState {
 	delayer := delayerMaker.NewDelayer(ircJoinMaxBackoffSecs, ircJoinBackoffResetSecs, time.Second)
 
 	return &channelState{
@@ -55,6 +56,7 @@ func newChannelState(channel *IRCChannel, client *irc.Conn, delayerMaker Delayer
 		joinDone:        make(chan struct{}),
 		joined:          false,
 		joinUnsetSignal: make(chan bool),
+		chanservName:    chanservName,
 	}
 }
 
@@ -106,7 +108,7 @@ func (c *channelState) join(ctx context.Context) {
 	}
 
 	// Try to unban ourselves, just in case
-	c.client.Privmsgf("ChanServ", "UNBAN %s", c.channel.Name)
+	c.client.Privmsgf(c.chanservName, "UNBAN %s", c.channel.Name)
 
 	c.client.Join(c.channel.Name, c.channel.Password)
 	logging.Info("Channel %s monitor: join request sent", c.channel.Name)
@@ -156,6 +158,7 @@ type ChannelReconciler struct {
 	timeTeller   TimeTeller
 
 	channels map[string]*channelState
+	chanservName  string
 
 	stopCtx       context.Context
 	stopCtxCancel context.CancelFunc
@@ -171,6 +174,7 @@ func NewChannelReconciler(config *Config, client *irc.Conn, delayerMaker Delayer
 		delayerMaker:    delayerMaker,
 		timeTeller:      timeTeller,
 		channels:        make(map[string]*channelState),
+		chanservName:    config.ChanservName,
 	}
 
 	reconciler.registerHandlers()
@@ -227,7 +231,7 @@ func (r *ChannelReconciler) HandleKick(nick string, channel string) {
 }
 
 func (r *ChannelReconciler) unsafeAddChannel(channel *IRCChannel) *channelState {
-	c := newChannelState(channel, r.client, r.delayerMaker, r.timeTeller)
+	c := newChannelState(channel, r.client, r.delayerMaker, r.timeTeller, r.chanservName)
 
 	r.stopWg.Add(1)
 	go c.Monitor(r.stopCtx, &r.stopWg)
