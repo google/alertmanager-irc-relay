@@ -33,6 +33,8 @@ irc_host_password: myserver_password
 irc_nickname: myalertbot
 # Password used to identify with NickServ
 irc_nickname_password: mynickserv_key
+# If true, SASL authentication will be used to log in to the server.
+irc_use_sasl: false
 # Use this IRC real name
 irc_realname: myrealname
 
@@ -113,5 +115,3 @@ be sent to:
 send_resolved: false
 url: http://localhost:8000/mychannel
 ```
-
-

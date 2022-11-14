@@ -37,6 +37,7 @@ type Config struct {
 	HTTPPort        int          `yaml:"http_port"`
 	IRCNick         string       `yaml:"irc_nickname"`
 	IRCNickPass     string       `yaml:"irc_nickname_password"`
+	IRCUseSASL      bool         `yaml:"irc_use_sasl"`
 	IRCRealName     string       `yaml:"irc_realname"`
 	IRCHost         string       `yaml:"irc_host"`
 	IRCPort         int          `yaml:"irc_port"`
@@ -60,6 +61,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		HTTPPort:        8000,
 		IRCNick:         "alertmanager-irc-relay",
 		IRCNickPass:     "",
+		IRCUseSASL:      false,
 		IRCRealName:     "Alertmanager IRC Relay",
 		IRCHost:         "example.com",
 		IRCPort:         7000,

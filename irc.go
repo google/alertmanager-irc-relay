@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/emersion/go-sasl"
 	irc "github.com/fluffle/goirc/client"
 	"github.com/google/alertmanager-irc-relay/logging"
 	"github.com/prometheus/client_golang/prometheus"
@@ -73,6 +74,11 @@ func makeGOIRCConfig(config *Config) *irc.Config {
 	ircConfig.Timeout = connectionTimeoutSecs * time.Second
 	ircConfig.NewNick = func(n string) string { return n + "^" }
 
+	if config.IRCUseSASL && config.IRCNickPass != "" {
+		ircConfig.EnableCapabilityNegotiation = true
+		ircConfig.Sasl = sasl.NewPlainClient("", config.IRCNick, config.IRCNickPass)
+	}
+
 	return ircConfig
 }
 
@@ -81,6 +87,7 @@ type IRCNotifier struct {
 	// might change its copy.
 	Nick         string
 	NickPassword string
+	UseSASL      bool
 
 	NickservName string
 	NickservIdentifyPatterns []string
@@ -122,6 +129,7 @@ func NewIRCNotifier(config *Config, alertMsgs chan AlertMsg, delayerMaker Delaye
 	notifier := &IRCNotifier{
 		Nick:                     config.IRCNick,
 		NickPassword:             config.IRCNickPass,
+		UseSASL:                  config.IRCUseSASL,
 		NickservName:             config.NickservName,
 		NickservIdentifyPatterns: config.NickservIdentifyPatterns,
 		Client:                   client,
@@ -171,6 +179,11 @@ func (n *IRCNotifier) HandleNotice(nick string, msg string) {
 }
 
 func (n *IRCNotifier) HandleNickservMsg(msg string) {
+	if n.UseSASL {
+		logging.Debug("Skip processing NickServ request, SASL is enabled instead")
+		return
+	}
+
 	if n.NickPassword == "" {
 		logging.Debug("Skip processing NickServ request, no password configured")
 		return
@@ -216,6 +229,11 @@ func (n *IRCNotifier) MaybeGhostNick() {
 }
 
 func (n *IRCNotifier) MaybeWaitForNickserv() {
+	if n.UseSASL {
+		logging.Debug("Skip NickServ wait, SASL is enabled instead")
+		return
+	}
+
 	if n.NickPassword == "" {
 		logging.Debug("Skip NickServ wait, no password configured")
 		return
