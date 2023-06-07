@@ -35,6 +35,7 @@ func makeTestIRCConfig(IRCPort int) *Config {
 		IRCHost:     "127.0.0.1",
 		IRCPort:     IRCPort,
 		IRCUseSSL:   false,
+		IRCPingSecs: 60,
 		IRCChannels: []IRCChannel{
 			IRCChannel{Name: "#foo"},
 		},
@@ -404,6 +405,128 @@ func TestReconnect(t *testing.T) {
 	}
 }
 
+func TestReconnectNickIdentChange(t *testing.T) {
+	server, port := makeTestServer(t)
+	config := makeTestIRCConfig(port)
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
+
+	var testStep sync.WaitGroup
+
+	userHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		testStep.Done()
+		r := fmt.Sprintf(":example.com 001 %s :Welcome to the Internet Relay Network %s!~%s@example.com\n",
+			line.Args[0], line.Args[0], line.Args[0])
+		_, err := conn.WriteString(r)
+		return err
+	}
+	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		testStep.Done()
+		return hJOIN(conn, line)
+	}
+	server.SetHandler("USER", userHandler)
+	server.SetHandler("JOIN", joinHandler)
+
+	testStep.Add(2)
+	go notifier.Run(ctx, stopWg)
+
+	// Wait until the pre-joined channel is seen.
+	testStep.Wait()
+
+	if ident := notifier.IrcConfig.Me.Ident; ident != "~foo" {
+		t.Errorf("IRC client failed to learn new nick ident. Using %s", ident)
+	}
+
+	// Simulate disconnection.
+	testStep.Add(2)
+	server.Client.Close()
+
+	// Wait again until the pre-joined channel is seen.
+	testStep.Wait()
+
+	cancel()
+	stopWg.Wait()
+
+	server.Stop()
+
+	expectedCommands := []string{
+		// Commands from first connection
+		"NICK foo",
+		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
+		"JOIN #foo",
+		// Commands from reconnection
+		"NICK foo",
+		"USER foo 12 * :", // NOTE: the client didn't used ~foo as its ident
+		"PRIVMSG ChanServ :UNBAN #foo",
+		"JOIN #foo",
+		"QUIT :see ya",
+	}
+
+	if !reflect.DeepEqual(expectedCommands, server.Log) {
+		t.Error("Reconnection did not happen correctly. Received commands:\n", strings.Join(server.Log, "\n"))
+	}
+}
+
+func TestReconnectMissingPong(t *testing.T) {
+	server, port := makeTestServer(t)
+	config := makeTestIRCConfig(port)
+	config.IRCPingSecs = 2
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
+
+	var testStep sync.WaitGroup
+
+	joinHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		testStep.Done()
+		return hJOIN(conn, line)
+	}
+	server.SetHandler("JOIN", joinHandler)
+
+	testStep.Add(1)
+	go notifier.Run(ctx, stopWg)
+
+	// Wait until the pre-joined channel is seen.
+	testStep.Wait()
+
+	// Wait for a client disconnect due to missing PONGs...
+	testStep.Add(1)
+
+	// Wait again until the pre-joined channel is seen.
+	testStep.Wait()
+
+	cancel()
+	stopWg.Wait()
+
+	server.Stop()
+
+	expectedCommands := []string{
+		// Commands from first connection
+		"NICK foo",
+		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
+		"JOIN #foo",
+		// Ping commands contain timestamps; note the modified check below!
+		// Commands from reconnection
+		"NICK foo",
+		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
+		"JOIN #foo",
+		"QUIT :see ya",
+	}
+
+	logPos := 0
+	for _, cmd := range server.Log {
+		if !strings.HasPrefix(cmd, "PING :") {
+			server.Log[logPos] = cmd
+			logPos++
+		}
+	}
+	server.Log = server.Log[:logPos]
+
+	if !reflect.DeepEqual(expectedCommands, server.Log) {
+		t.Error("Reconnection did not happen correctly. Received commands:\n", strings.Join(server.Log, "\n"))
+	}
+}
+
 func TestConnectErrorRetry(t *testing.T) {
 	server, port := makeTestServer(t)
 	config := makeTestIRCConfig(port)
@@ -610,5 +733,56 @@ func TestStopRunningWhenHalfConnected(t *testing.T) {
 
 	if !reflect.DeepEqual(expectedCommands, server.Log) {
 		t.Error("Alert not sent correctly. Received commands:\n", strings.Join(server.Log, "\n"))
+	}
+}
+
+func TestPingPong(t *testing.T) {
+	server, port := makeTestServer(t)
+	config := makeTestIRCConfig(port)
+	config.IRCPingSecs = 1
+	notifier, _, ctx, cancel, stopWg := makeTestNotifier(t, config)
+
+	var testStep sync.WaitGroup
+
+	pingHandler := func(conn *bufio.ReadWriter, line *irc.Line) error {
+		testStep.Done()
+		r := fmt.Sprintf(":example.com PONG example.com :%s", line.Args[0])
+		_, err := conn.WriteString(r)
+		return err
+	}
+	server.SetHandler("PING", pingHandler)
+
+	testStep.Add(3)
+	go notifier.Run(ctx, stopWg)
+
+	// Wait until three PING-PONGs have been exchanged..
+	testStep.Wait()
+
+	cancel()
+	stopWg.Wait()
+
+	server.Stop()
+
+	expectedCommands := []string{
+		// Commands from first connection
+		"NICK foo",
+		"USER foo 12 * :",
+		"PRIVMSG ChanServ :UNBAN #foo",
+		"JOIN #foo",
+		// Ping commands contain timestamps; note the modified check below!
+		"PING :__TS1__",
+		"PING :__TS2__",
+		"PING :__TS3__",
+		"QUIT :see ya",
+	}
+
+	expectedCommandsCheck := len(expectedCommands) == len(server.Log) &&
+		reflect.DeepEqual(expectedCommands[:4], server.Log[:4]) &&
+		strings.HasPrefix(server.Log[4], "PING :") &&
+		strings.HasPrefix(server.Log[5], "PING :") &&
+		strings.HasPrefix(server.Log[6], "PING :") &&
+		reflect.DeepEqual(expectedCommands[7:], server.Log[7:])
+	if !expectedCommandsCheck {
+		t.Error("Reconnection did not happen correctly. Received commands:\n", strings.Join(server.Log, "\n"))
 	}
 }

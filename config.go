@@ -43,6 +43,7 @@ type Config struct {
 	IRCHostPass     string       `yaml:"irc_host_password"`
 	IRCUseSSL       bool         `yaml:"irc_use_ssl"`
 	IRCVerifySSL    bool         `yaml:"irc_verify_ssl"`
+	IRCPingSecs     int          `yaml:"irc_ping_secs"`
 	IRCChannels     []IRCChannel `yaml:"irc_channels"`
 	MsgTemplate     string       `yaml:"msg_template"`
 	MsgOnce         bool         `yaml:"msg_once_per_alert_group"`
@@ -66,6 +67,7 @@ func LoadConfig(configFile string) (*Config, error) {
 		IRCHostPass:     "",
 		IRCUseSSL:       true,
 		IRCVerifySSL:    true,
+		IRCPingSecs:     60,
 		IRCChannels:     []IRCChannel{},
 		MsgOnce:         false,
 		UsePrivmsg:      false,
