@@ -27,6 +27,7 @@ import (
 
 type Formatter struct {
 	MsgTemplate *template.Template
+	MsgTemplateResolved *template.Template
 	MsgOnce     bool
 }
 
@@ -44,16 +45,27 @@ func NewFormatter(config *Config) (*Formatter, error) {
 	if err != nil {
 		return nil, err
 	}
+	tmplresolved, err := template.New("msg").Funcs(funcMap).Parse(config.MsgTemplateResolved)
+	if err != nil {
+		return nil, err
+	}
 	return &Formatter{
 		MsgTemplate: tmpl,
+		MsgTemplateResolved: tmplresolved,
 		MsgOnce:     config.MsgOnce,
 	}, nil
 }
 
-func (f *Formatter) FormatMsg(ircChannel string, data interface{}) []string {
+func (f *Formatter) FormatMsg(ircChannel string, data interface{}, status string) []string {
 	output := bytes.Buffer{}
 	var msg string
-	if err := f.MsgTemplate.Execute(&output, data); err != nil {
+	var msgtemplate *template.Template
+	if status == "resolved" {
+		msgtemplate = f.MsgTemplateResolved
+	} else {
+		msgtemplate = f.MsgTemplate
+	}
+	if err := msgtemplate.Execute(&output, data); err != nil {
 		msg_bytes, _ := json.Marshal(data)
 		msg = string(msg_bytes)
 		logging.Error("Could not apply msg template on alert (%s): %s",
@@ -75,13 +87,13 @@ func (f *Formatter) GetMsgsFromAlertMessage(ircChannel string,
 	data *promtmpl.Data) []AlertMsg {
 	msgs := []AlertMsg{}
 	if f.MsgOnce {
-		for _, msg := range f.FormatMsg(ircChannel, data) {
+		for _, msg := range f.FormatMsg(ircChannel, data, data.Status) {
 			msgs = append(msgs,
 				AlertMsg{Channel: ircChannel, Alert: msg})
 		}
 	} else {
 		for _, alert := range data.Alerts {
-			for _, msg := range f.FormatMsg(ircChannel, alert) {
+			for _, msg := range f.FormatMsg(ircChannel, alert, data.Status) {
 				msgs = append(msgs,
 					AlertMsg{Channel: ircChannel, Alert: msg})
 			}

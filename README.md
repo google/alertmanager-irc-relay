@@ -61,6 +61,9 @@ use_privmsg: yes
 #
 # The formatting is based on golang's text/template .
 msg_template: "Alert {{ .Labels.alertname }} on {{ .Labels.instance }} is {{ .Status }}"
+# By default, firing and resolved messages use the template defined as msg_template.
+# Define msg_template_resolved to define a different template for resolved messages.
+# msg_template_resolved: "Resolved: {{ .Labels.alertname }} on {{ .Labels.instance }}"
 # Note: When sending only one message per alert group the default
 # msg_template is set to
 # "Alert {{ .GroupLabels.alertname }} for {{ .GroupLabels.job }} is {{ .Status }}"

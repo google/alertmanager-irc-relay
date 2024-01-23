@@ -133,3 +133,20 @@ func TestMultilineTemplates(t *testing.T) {
 
 	CreateFormatterAndCheckOutput(t, &testingConfig, expectedAlertMsgs)
 }
+
+func TestResolvedTemplate(t *testing.T) {
+	testingConfig := Config{
+		MsgTemplateResolved: "Resolved: {{ .Labels.alertname }}",
+	}
+	expectedAlertMsgs := []AlertMsg{
+		AlertMsg{
+			Channel: "#somechannel",
+			Alert:   "Resolved: airDown",
+		},
+		AlertMsg{
+			Channel: "#somechannel",
+			Alert:   "Resolved: airDown",
+		},
+	}
+	CreateFormatterAndCheckOutput(t, &testingConfig, expectedAlertMsgs)
+}
