@@ -45,6 +45,7 @@ type Config struct {
 	IRCVerifySSL    bool         `yaml:"irc_verify_ssl"`
 	IRCChannels     []IRCChannel `yaml:"irc_channels"`
 	MsgTemplate     string       `yaml:"msg_template"`
+	MsgTemplateResolved string   `yaml:"msg_template_resolved"`
 	MsgOnce         bool         `yaml:"msg_once_per_alert_group"`
 	UsePrivmsg      bool         `yaml:"use_privmsg"`
 	AlertBufferSize int          `yaml:"alert_buffer_size"`
@@ -98,6 +99,9 @@ func LoadConfig(configFile string) (*Config, error) {
 		} else {
 			config.MsgTemplate = defaultMsgTemplate
 		}
+	}
+	if config.MsgTemplateResolved == "" {
+		config.MsgTemplateResolved = config.MsgTemplate
 	}
 
 	loadedConfig, _ := yaml.Marshal(config)
